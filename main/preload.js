@@ -34,6 +34,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   previewHtmlFile: (filePath) => ipcRenderer.invoke('preview-html-file', filePath),
   getRecordedExports: () => ipcRenderer.invoke('get-recorded-exports'),
 
+  // ★ 后台管理：删除 / 下载 / 上传 / 获取存储目录
+  deleteRecording: (dirPath) => ipcRenderer.invoke('delete-recording', dirPath),
+  downloadRecording: (dirPath) => ipcRenderer.invoke('download-recording', dirPath),
+  uploadRecording: (dirPath) => ipcRenderer.invoke('upload-recording', dirPath),
+  getAppRecordingsDir: () => ipcRenderer.invoke('get-app-recordings-dir'),
+
   // ★ 凭证管理（密码快捷登录）
   getCredentials: (domain) => ipcRenderer.invoke('get-credentials', domain),
   getCredential: (data) => ipcRenderer.invoke('get-credential', data),

@@ -16,7 +16,13 @@ let tray = null;
 let isQuitting = false;
 
 function getOutputDir() {
-  return path.join(app.getPath('documents'), 'playwright-page-shot', 'output');
+  const dir = path.join(app.getPath('userData'), 'recordings');
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch (e) {
+    console.warn('[main] 创建 recordings 目录失败:', e.message);
+  }
+  return dir;
 }
 
 /** ★ 获取浏览器持久化配置目录（保存 cookies/session/登录状态） */
@@ -54,7 +60,7 @@ async function createPanelWindow() {
   const { height: screenHeight } = primaryDisplay.workAreaSize;
   const { width: screenWidth } = primaryDisplay.workAreaSize;
 
-  const panelWidth = 380;
+  const panelWidth = 460; // ★ 侧栏64 + 中间380 + 余量
   const panelHeight = Math.min(screenHeight - 40, 780);
 
   panelWindow = new BrowserWindow({
@@ -65,14 +71,14 @@ async function createPanelWindow() {
     title: '场景录制助手',
     resizable: true,
     minimizable: true,
-    maximizable: false,
+    maximizable: true, // ★ 支持最大化
     frame: true,
     autoHideMenuBar: true,
     alwaysOnTop: true,
     skipTaskbar: false,
     show: false,  // 先隐藏，加载完再显示
     icon: createAppIcon(),
-    minWidth: 380, // ★ 最小宽度 = 面板宽度
+    minWidth: 400, // ★ 侧栏 + 中间最小可见
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

@@ -48,6 +48,13 @@ const PREVIEW_WIDTH = 820;
 let loginFormDomain = null;       // 当前检测到登录表单的域名
 let savedCredentials = [];        // 当前域名的已保存凭证列表
 let isCredentialsExpanded = false; // 配置阶段"已保存账号"面板展开状态
+// ★ 三栏布局视图状态
+let currentView = 'recording';        // 'recording' | 'management'
+let rightColumnOpen = false;          // 右栏是否展开
+let rightPanelMode = 'steps';         // 'steps'(步骤树) | 'preview'(webview)
+let middleCollapsed = false;          // 中间列是否折叠
+let currentPreviewFiles = [];         // 当前预览场景的文件列表
+const SIDEBAR_W = 64, MIDDLE_W = 380, RIGHT_STEP_W = 380, RIGHT_PREVIEW_W = 820;
 
 // DOM 引用
 const contentEl = document.getElementById('content');
@@ -65,6 +72,11 @@ api.onStateSync((newState) => {
   if (wasProcessing) {
     _isProcessing = false;
     _hideLoadingOverlay();
+  }
+  // ★ 管理视图下不重渲染录制面板（除非有场景卡片需要刷新）
+  if (currentView !== 'recording') {
+    if (document.querySelector('.scenario-card')) renderManagementView();
+    return;
   }
   rerenderPanel();
 });
@@ -94,7 +106,9 @@ api.onCaptureProgress((msg) => {
 });
 
 api.onError((data) => {
-  updateStatus('错误: ' + (data.message || '未知错误'), 'var(--accent-red)');
+  const msg = data.message || '未知错误';
+  updateStatus('错误: ' + msg, 'var(--accent-red)');
+  showToast('错误：' + msg, 'error', 5000);
 });
 
 api.onSaveComplete((data) => {
@@ -142,10 +156,11 @@ async function navigateToUrl() {
     updateStatus('', '');
   } else {
     updateStatus('导航失败: ' + (result?.error || ''), 'var(--accent-red)');
+    showToast('导航失败: ' + (result?.error || ''), 'error');
   }
 }
 
-// ===== ★ 应用内预览（webview 嵌入） =====
+// ===== ★ 应用内预览（webview 嵌入，现位于右栏） =====
 
 /** 将本地文件路径转为 file:// URL */
 function filePathToUrl(filePath) {
@@ -156,16 +171,20 @@ function filePathToUrl(filePath) {
   return 'file://' + normalized;
 }
 
-/** 在应用内打开预览（webview） */
-async function showInAppPreview(filePath) {
+/** 在右栏打开预览（webview） */
+async function openPreview(filePath, htmlFiles) {
   const fileUrl = filePathToUrl(filePath);
   const filename = filePath.replace(/\\/g, '/').split('/').pop();
 
-  if (!isPreviewMode) {
-    isPreviewMode = true;
-    await api.resizeWindow(PANEL_WIDTH + PREVIEW_WIDTH);
-    document.getElementById('previewContainer').classList.add('active');
-  }
+  // 保存当前预览文件列表（用于步骤切换下拉框）
+  if (htmlFiles) currentPreviewFiles = htmlFiles;
+
+  rightColumnOpen = true;
+  rightPanelMode = 'preview';
+  updateLayout();
+
+  // 渲染步骤选择器
+  renderPreviewStepSelector();
 
   // 显示加载状态并导航
   const loading = document.getElementById('previewLoading');
@@ -179,21 +198,76 @@ async function showInAppPreview(filePath) {
   updateStatus('正在预览: ' + filename, 'var(--accent-blue)');
 }
 
-/** 关闭应用内预览 */
-function hideInAppPreview() {
-  isPreviewMode = false;
-  const container = document.getElementById('previewContainer');
-  if (container) container.classList.remove('active');
-  const webview = document.getElementById('previewWebview');
-  if (webview) webview.src = 'about:blank';
-  api.resizeWindow(PANEL_WIDTH);
-  updateStatus('预览已关闭', '');
+/** 渲染预览步骤选择器 */
+function renderPreviewStepSelector() {
+  // 移除旧的选择器
+  const oldSelector = document.querySelector('.preview-step-selector');
+  if (oldSelector) oldSelector.remove();
+
+  const rightCol = document.getElementById('rightColumn');
+  const selector = el('div', 'preview-step-selector');
+
+  // ★ 折叠/展开中间列按钮
+  const collapseBtn = el('button', 'scenario-action-btn', middleCollapsed ? '◀ 展开列表' : '▶ 折叠列表');
+  collapseBtn.style.padding = '4px 8px';
+  collapseBtn.style.fontSize = '10px';
+  collapseBtn.addEventListener('click', () => {
+    middleCollapsed = !middleCollapsed;
+    updateLayout();
+    collapseBtn.textContent = middleCollapsed ? '◀ 展开列表' : '▶ 折叠列表';
+  });
+  selector.appendChild(collapseBtn);
+
+  // 步骤选择下拉框（多于1个文件时显示）
+  if (currentPreviewFiles && currentPreviewFiles.length > 1) {
+    selector.appendChild(el('span', '', '📄 步骤:'));
+
+    const select = el('select');
+    currentPreviewFiles.forEach((file) => {
+      const opt = el('option', null, file.index + '. ' + (file.mainTitle || file.stepTitle || file.filename));
+      opt.value = file.filePath;
+      select.appendChild(opt);
+    });
+    select.addEventListener('change', () => {
+      const webview = document.getElementById('previewWebview');
+      const loading = document.getElementById('previewLoading');
+      if (loading) {
+        loading.textContent = '加载中...';
+        loading.classList.add('active');
+      }
+      webview.src = filePathToUrl(select.value);
+    });
+    selector.appendChild(select);
+  }
+
+  // 插入到 right-toolbar 之后
+  const toolbar = rightCol.querySelector('.right-toolbar');
+  if (toolbar) {
+    toolbar.after(selector);
+  }
 }
 
-// 关闭预览按钮
-const _closePreviewBtn = document.getElementById('closePreviewBtn');
-if (_closePreviewBtn) {
-  _closePreviewBtn.addEventListener('click', () => hideInAppPreview());
+/** 兼容旧调用 — 转发到 openPreview */
+async function showInAppPreview(filePath) {
+  await openPreview(filePath);
+}
+
+/** 关闭右栏 */
+function closeRightPanel() {
+  rightColumnOpen = false;
+  middleCollapsed = false;
+  const webview = document.getElementById('previewWebview');
+  if (webview) webview.src = 'about:blank';
+  // 移除步骤选择器
+  const oldSelector = document.querySelector('.preview-step-selector');
+  if (oldSelector) oldSelector.remove();
+  updateLayout();
+  updateStatus('', '');
+}
+
+/** 兼容旧调用 */
+function hideInAppPreview() {
+  closeRightPanel();
 }
 
 // webview 加载事件
@@ -271,6 +345,11 @@ function rerenderPanel() {
   }
 
   _restoreInputValues();
+
+  // ★ 右栏步骤树同步渲染（录制视图 + 右栏展开 + 步骤模式）
+  if (currentView === 'recording' && rightColumnOpen && rightPanelMode === 'steps') {
+    renderRightSteps();
+  }
 }
 
 function _saveInputValues() {
@@ -386,9 +465,6 @@ function renderConfigPhase() {
     });
   });
   contentEl.appendChild(startBtn);
-
-  // ★ 已录制内容（可展开面板）
-  renderRecordedExportsSection();
 
   // ★ 已保存账号管理（可展开面板）
   renderCredentialManagementSection();
@@ -950,7 +1026,7 @@ function renderRecordingPhase() {
     if (hasSelectedElement && mainTitleInput) {
       const mainTitle = mainTitleInput.value.trim();
       if (!mainTitle) {
-        updateStatus('请先输入主标题再进行下一步', 'var(--accent-red)');
+        showToast('请先输入主标题再进行下一步', 'error');
         return;
       }
       doCompleteMark();
@@ -977,11 +1053,7 @@ function renderRecordingPhase() {
   stepBox.appendChild(btnRow);
   contentEl.appendChild(stepBox);
 
-  // ── 录制记录 ──
-  contentEl.appendChild(el('div', 'section-title', '录制记录'));
-  const moduleListEl = el('div', 'module-list');
-  renderModuleList(moduleListEl);
-  contentEl.appendChild(moduleListEl);
+  // ★ 录制记录已移至右栏（renderRightSteps）
 }
 
 /** ★ 收集 introduction 数据 */
@@ -1004,20 +1076,15 @@ async function handleEndAndSave() {
   if (hasSelectedElement && mainTitleInput) {
     const mainTitle = mainTitleInput.value.trim();
     if (!mainTitle) {
-      updateStatus('请先输入主标题再结束保存', 'var(--accent-red)');
+      showToast('请先输入主标题再结束保存', 'error');
       return;
     }
     doCompleteMark();
   }
 
-  const saveDir = await api.selectSaveDirectory();
-  if (!saveDir) {
-    updateStatus('已取消保存', 'var(--text-muted)');
-    return;
-  }
-  await api.setOutputDir(saveDir);
+  // ★ 不再选择保存目录 — recorder.outputDir 已指向应用 userData/recordings
 
-  // ★ 使用环境配置对话框替代原 showBaseUrlDialog
+  // ★ 使用环境配置对话框
   const envConfig = await showEnvConfigDialog(state.sceneCode || state.sceneConfig.sceneName);
 
   const modNameInput = document.getElementById('modNameInput');
@@ -1032,52 +1099,30 @@ async function handleEndAndSave() {
     mainModDesc: mainModDescInput ? mainModDescInput.value.trim() : '',
     resourceBaseUrl: envConfig.envBaseUrl, // 向后兼容
     introduction: intro,
-    environment: envConfig.environment,   // ★ 新增
-    sceneCode: envConfig.sceneCode,       // ★ 新增
-    envBaseUrl: envConfig.envBaseUrl,     // ★ 新增
+    environment: envConfig.environment,
+    sceneCode: envConfig.sceneCode,
+    envBaseUrl: envConfig.envBaseUrl,
   });
 
   if (result && result.type === 'error') {
-    updateStatus('保存失败: ' + (result.message || ''), 'var(--accent-red)');
+    showToast('保存失败：' + (result.message || ''), 'error', 5000);
   } else if (result && result.type === 'saveComplete') {
-    // ★ 保存成功后弹出预览选项
-    showSaveResultDialog(result.fileCount, result.outputDir);
-  }
-}
-
-/** ★ 保存成功后显示结果对话框（含预览按钮） */
-function showSaveResultDialog(fileCount, outputDir) {
-  const overlay = el('div', 'dialog-overlay');
-  const dialog = el('div', 'dialog');
-
-  dialog.appendChild(el('div', 'dialog-title', '✅ 保存成功'));
-  const desc = el('div', 'dialog-desc', fileCount + ' 个文件已保存到：\n' + outputDir);
-  desc.style.whiteSpace = 'pre-wrap';
-  dialog.appendChild(desc);
-
-  const btnRow = el('div', 'dialog-btn-row');
-
-  const previewBtn = el('button', 'dialog-confirm-btn blue', '🔍 在应用内预览');
-  previewBtn.addEventListener('click', async () => {
-    overlay.remove();
-    const previewResult = await api.previewExport();
-    if (previewResult && previewResult.success) {
-      await showInAppPreview(previewResult.filePath);
-    } else {
-      updateStatus('预览失败: ' + (previewResult ? previewResult.error : ''), 'var(--accent-red)');
+    showToast('保存成功：' + result.fileCount + ' 个文件', 'success');
+    // ★ 自动切换到管理视图并预览
+    currentView = 'management';
+    switchView();
+    const p = await api.previewExport();
+    if (p && p.success) {
+      // 获取录制文件列表用于步骤选择器
+      const exportsResult = await api.getRecordedExports();
+      if (exportsResult && exportsResult.success && exportsResult.exports.length > 0) {
+        const latest = exportsResult.exports[0];
+        await openPreview(p.filePath, latest.htmlFiles);
+      } else {
+        await openPreview(p.filePath);
+      }
     }
-  });
-
-  const closeBtn = el('button', 'dialog-cancel-btn', '关闭');
-  closeBtn.addEventListener('click', () => overlay.remove());
-
-  btnRow.appendChild(previewBtn);
-  btnRow.appendChild(closeBtn);
-  dialog.appendChild(btnRow);
-  overlay.appendChild(dialog);
-  document.body.appendChild(overlay);
-
-  updateStatus('保存成功！' + fileCount + ' 个文件已保存', 'var(--accent-green)');
+  }
 }
 
 // ===== 完成标记 =====
@@ -1090,7 +1135,7 @@ function doCompleteMark() {
 
   const mainTitle = mainTitleInput.value.trim();
   if (!mainTitle) {
-    updateStatus('请输入主标题', 'var(--accent-red)');
+    showToast('请输入主标题', 'error');
     return;
   }
 
@@ -1380,6 +1425,258 @@ document.addEventListener('keydown', (e) => {
     }
   }
 });
+
+// ===== ★ Toast 通知系统 =====
+function showToast(message, type, duration) {
+  type = type || 'info';
+  duration = duration || 3200;
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+  const t = el('div', 'toast ' + type, message);
+  container.appendChild(t);
+  setTimeout(() => {
+    t.style.opacity = '0';
+    t.style.transform = 'translateX(20px)';
+    setTimeout(() => t.remove(), 200);
+  }, duration);
+}
+
+// ===== ★ 三栏布局视图管理 =====
+
+/** 计算当前布局总宽度 */
+function computeLayoutWidth() {
+  let w = SIDEBAR_W;
+  if (!middleCollapsed) w += MIDDLE_W;
+  if (rightColumnOpen) {
+    w += (rightPanelMode === 'preview') ? RIGHT_PREVIEW_W : RIGHT_STEP_W;
+  }
+  return w;
+}
+
+/** 更新布局（切换 CSS 类 + 调整窗口） */
+function updateLayout() {
+  const right = document.getElementById('rightColumn');
+  const middle = document.getElementById('mainColumn');
+  if (!right || !middle) return;
+
+  right.classList.toggle('collapsed', !rightColumnOpen);
+  right.classList.toggle('preview-mode', rightColumnOpen && rightPanelMode === 'preview');
+  middle.classList.toggle('collapsed', middleCollapsed);
+
+  // 更新标题和按钮
+  const rightTitle = document.getElementById('rightTitle');
+  if (rightTitle) {
+    rightTitle.textContent = rightPanelMode === 'preview' ? '页面预览' : '录制记录';
+  }
+  const toggleBtn = document.getElementById('toggleRightBtn');
+  if (toggleBtn) {
+    toggleBtn.textContent = rightColumnOpen ? '▼' : '▶';
+  }
+
+  // 调整窗口尺寸（最大化时由 IPC 守卫跳过）
+  api.resizeWindow(computeLayoutWidth());
+}
+
+/** 切换视图（录制 / 管理） */
+function switchView() {
+  // 更新菜单高亮
+  document.querySelectorAll('.menu-item').forEach((item) => {
+    item.classList.toggle('active', item.dataset.view === currentView);
+  });
+
+  // 重置右栏状态
+  rightColumnOpen = false;
+  middleCollapsed = false;
+  rightPanelMode = 'steps';
+
+  // 显隐 URL 栏
+  const urlBar = document.getElementById('urlBar');
+  if (urlBar) {
+    urlBar.style.display = (currentView === 'recording') ? '' : 'none';
+  }
+
+  // 更新中间列标题
+  const middleTitle = document.getElementById('middleTitle');
+  if (middleTitle) {
+    middleTitle.textContent = (currentView === 'recording') ? '页面录制' : '后台管理';
+  }
+
+  // 渲染对应视图
+  if (currentView === 'recording') {
+    rerenderPanel();
+  } else {
+    renderManagementView();
+  }
+
+  updateLayout();
+}
+
+// ===== ★ 录制模式：右栏步骤树 =====
+function renderRightSteps() {
+  const c = document.getElementById('rightContent');
+  if (!c) return;
+  c.innerHTML = '';
+  c.appendChild(el('div', 'section-title', '录制记录'));
+  const list = el('div', 'module-list');
+  renderModuleList(list);
+  c.appendChild(list);
+}
+
+// ===== ★ 管理模式：场景列表 =====
+async function renderManagementView() {
+  const c = document.getElementById('content');
+  if (!c) return;
+  c.innerHTML = '';
+  c.appendChild(el('div', 'section-title', '已录制场景'));
+  c.appendChild(el('div', 'empty-state', '加载中...'));
+
+  const result = await api.getRecordedExports();
+  c.innerHTML = '';
+
+  if (!result || !result.success) {
+    c.appendChild(el('div', 'empty-state', '加载失败: ' + (result ? result.error : '未知错误')));
+    return;
+  }
+
+  if (!result.exports || result.exports.length === 0) {
+    c.appendChild(el('div', 'empty-state', '暂无已录制的内容'));
+    return;
+  }
+
+  result.exports.forEach((exp) => {
+    c.appendChild(buildScenarioCard(exp));
+  });
+}
+
+/** 构建场景卡片 */
+function buildScenarioCard(exp) {
+  const card = el('div', 'scenario-card');
+
+  // 头部信息
+  const header = el('div', 'scenario-card-header');
+  const info = el('div', 'scenario-card-info');
+  info.appendChild(el('div', 'scenario-card-title', exp.sceneTitle || exp.dirName));
+  if (exp.sceneSubTitle) {
+    info.appendChild(el('div', 'scenario-card-subtitle', exp.sceneSubTitle));
+  }
+
+  // 修改时间
+  try {
+    const stat = { mtime: new Date() }; // 后端已排序，仅展示步骤数
+    info.appendChild(el('div', 'scenario-card-meta', exp.stepCount + ' 步 | 目录: ' + exp.dirName));
+  } catch (e) {
+    info.appendChild(el('div', 'scenario-card-meta', exp.stepCount + ' 步'));
+  }
+  header.appendChild(info);
+  card.appendChild(header);
+
+  // 操作按钮
+  const actions = el('div', 'scenario-card-actions');
+
+  // 预览
+  const previewBtn = el('button', 'scenario-action-btn preview', '🔍 预览');
+  previewBtn.addEventListener('click', async () => {
+    if (exp.htmlFiles && exp.htmlFiles.length > 0) {
+      await openPreview(exp.htmlFiles[0].filePath, exp.htmlFiles);
+    } else {
+      showToast('该场景没有可预览的文件', 'error');
+    }
+  });
+  actions.appendChild(previewBtn);
+
+  // 下载
+  const downloadBtn = el('button', 'scenario-action-btn download', '📥 下载');
+  downloadBtn.addEventListener('click', async () => {
+    downloadBtn.disabled = true;
+    downloadBtn.textContent = '下载中...';
+    const result = await api.downloadRecording(exp.dirPath);
+    downloadBtn.disabled = false;
+    downloadBtn.textContent = '📥 下载';
+    if (result && result.success) {
+      showToast('下载成功：已拷贝到 ' + result.destination, 'success', 5000);
+    } else if (result && result.canceled) {
+      // 用户取消，不提示
+    } else {
+      showToast('下载失败：' + (result ? result.error : '未知错误'), 'error', 5000);
+    }
+  });
+  actions.appendChild(downloadBtn);
+
+  // 上传
+  const uploadBtn = el('button', 'scenario-action-btn upload', '📤 上传');
+  uploadBtn.addEventListener('click', async () => {
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = '上传中...';
+    const result = await api.uploadRecording(exp.dirPath);
+    uploadBtn.disabled = false;
+    uploadBtn.textContent = '📤 上传';
+    if (result && result.success) {
+      showToast('上传完成：' + result.fileCount + ' 个文件' + (result.message ? '\n' + result.message : ''), 'success', 5000);
+    } else {
+      showToast('上传失败：' + (result ? result.error : '未知错误'), 'error', 5000);
+    }
+  });
+  actions.appendChild(uploadBtn);
+
+  // 删除
+  const deleteBtn = el('button', 'scenario-action-btn delete', '🗑️ 删除');
+  deleteBtn.addEventListener('click', () => {
+    showConfirmDialog('确认删除', '确认删除场景 "' + (exp.sceneTitle || exp.dirName) + '" 吗？\n删除后无法恢复。', async () => {
+      const result = await api.deleteRecording(exp.dirPath);
+      if (result && result.success) {
+        showToast('已删除场景: ' + (exp.sceneTitle || exp.dirName), 'success');
+        renderManagementView();
+      } else {
+        showToast('删除失败：' + (result ? result.error : '未知错误'), 'error', 5000);
+      }
+    });
+  });
+  actions.appendChild(deleteBtn);
+
+  card.appendChild(actions);
+  return card;
+}
+
+// ===== ★ 菜单 + 按钮事件初始化 =====
+function initLayoutEvents() {
+  // 菜单项点击
+  document.querySelectorAll('.menu-item').forEach((item) => {
+    item.addEventListener('click', () => {
+      const view = item.dataset.view;
+      if (view && view !== currentView) {
+        currentView = view;
+        switchView();
+      }
+    });
+  });
+
+  // 右栏展开/收起按钮
+  const toggleBtn = document.getElementById('toggleRightBtn');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      if (currentView === 'recording') {
+        rightColumnOpen = !rightColumnOpen;
+        rightPanelMode = 'steps';
+        updateLayout();
+        if (rightColumnOpen) renderRightSteps();
+      } else {
+        // 管理视图下切换预览
+        rightColumnOpen = !rightColumnOpen;
+        if (rightColumnOpen) rightPanelMode = 'preview';
+        updateLayout();
+      }
+    });
+  }
+
+  // 关闭右栏按钮
+  const closeBtn = document.getElementById('closeRightBtn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => closeRightPanel());
+  }
+}
+
+// ===== 初始化 =====
+initLayoutEvents();
 
 // ===== 初始渲染 =====
 rerenderPanel();

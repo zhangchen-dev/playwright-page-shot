@@ -117,6 +117,9 @@ function setupIpc({ recorder, browserManager, panelWindowGetter, credStore }) {
     const win = panelWindowGetter();
     if (!win) return { success: false };
 
+    // ★ 最大化时不强制改尺寸，由 flex 布局自适应
+    if (win.isMaximized()) return { success: true, maximized: true };
+
     const { screen } = require('electron');
     const display = screen.getDisplayNearestPoint(win.getBounds());
     const screenWidth = display.workAreaSize.width;
@@ -323,6 +326,91 @@ function setupIpc({ recorder, browserManager, panelWindowGetter, credStore }) {
     } catch (err) {
       return { success: false, error: err.message };
     }
+  });
+
+  // ===== ★ 删除录制场景 =====
+  ipcMain.handle('delete-recording', async (event, dirPath) => {
+    try {
+      const recordingsRoot = path.resolve(recorder.outputDir);
+      const resolved = path.resolve(dirPath);
+      // 安全校验：必须在 recordings 目录内
+      if (!resolved.startsWith(recordingsRoot + path.sep)) {
+        return { success: false, error: '非法路径' };
+      }
+      await fs.promises.rm(resolved, { recursive: true, force: true });
+      return { success: true };
+    } catch (err) {
+      console.error('[IPC] delete-recording 失败:', err);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // ===== ★ 下载录制场景（拷贝文件夹到用户选择的位置） =====
+  ipcMain.handle('download-recording', async (event, dirPath) => {
+    try {
+      const win = panelWindowGetter();
+      const result = await dialog.showOpenDialog(win, {
+        title: '选择下载保存位置',
+        properties: ['createDirectory', 'openDirectory'],
+      });
+      if (result.canceled) return { success: false, canceled: true };
+
+      const destRoot = result.filePaths[0];
+      const scenarioName = path.basename(dirPath);
+      const dest = path.join(destRoot, scenarioName);
+
+      await fs.promises.mkdir(dest, { recursive: true });
+      await fs.promises.cp(dirPath, dest, { recursive: true });
+      return { success: true, destination: dest };
+    } catch (err) {
+      console.error('[IPC] download-recording 失败:', err);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // ===== ★ 上传录制场景（HTML/CSS + 转换后的 JSON 配置） =====
+  ipcMain.handle('upload-recording', async (event, dirPath) => {
+    try {
+      const { transformConfig } = require('../src/config-transformer');
+
+      // 1. 读取目录中所有 HTML 和 CSS 文件
+      const files = fs.readdirSync(dirPath);
+      const htmlCssFiles = files.filter((f) => f.endsWith('.html') || f.endsWith('.css'));
+
+      // 2. 读取并转换 demo_config.json
+      const configPath = path.join(dirPath, 'demo_config.json');
+      let transformedConfig = null;
+      if (fs.existsSync(configPath)) {
+        const rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        transformedConfig = transformConfig(rawConfig); // ★ 转换方法（目前原样返回）
+      }
+
+      // 3. TODO: 上传 HTML/CSS 文件到资源接口（接口地址待定）
+      //    const UPLOAD_RESOURCE_API = ''; // 待配置
+      //    await uploadFiles(htmlCssFiles, dirPath, UPLOAD_RESOURCE_API);
+
+      // 4. TODO: 上传转换后的 JSON 配置到配置接口（接口地址待定）
+      //    const UPLOAD_CONFIG_API = ''; // 待配置
+      //    await uploadConfig(transformedConfig, UPLOAD_CONFIG_API);
+
+      console.log('[IPC] upload-recording 占位完成: %d 个文件, 配置=%s',
+        htmlCssFiles.length, transformedConfig ? '已转换' : '无');
+
+      return {
+        success: true,
+        fileCount: htmlCssFiles.length,
+        configUploaded: !!transformedConfig,
+        message: '上传功能待接口配置（当前为占位实现）',
+      };
+    } catch (err) {
+      console.error('[IPC] upload-recording 失败:', err);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // ===== ★ 获取应用录制存储目录 =====
+  ipcMain.handle('get-app-recordings-dir', async (event) => {
+    return recorder.outputDir;
   });
 
   console.log('[IPC] 处理器已注册');

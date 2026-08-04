@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src 'self' file:;">
+  <title>场景录制助手</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 标题栏 -->
+    <div class="title-bar">
+      <span class="title-icon">🎬</span>
+      <span class="title-text">场景录制助手</span>
+    </div>
+
+    <!-- URL 导航栏 -->
+    <div class="url-bar">
+      <span class="url-label">🔗</span>
+      <input type="text" id="urlInput" placeholder="输入网址后回车打开浏览器..." class="url-input">
+      <button id="navigateBtn" class="url-go-btn">→</button>
+    </div>
+
+    <!-- 内容区 -->
+    <div id="content" class="content-area"></div>
+
+    <!-- 状态栏 -->
+    <div id="statusBar" class="status-bar"></div>
+  </div>
+
+  <!-- ★ 应用内预览容器（嵌入 webview） -->
+  <div id="previewContainer" class="preview-container">
+    <div class="preview-toolbar">
+      <span class="preview-toolbar-title">📋 页面预览</span>
+      <button id="closePreviewBtn" class="preview-close-btn">✕ 关闭预览</button>
+    </div>
+    <div class="preview-loading" id="previewLoading">加载中...</div>
+    <webview id="previewWebview" class="preview-webview-inner" autosize="on"></webview>
+  </div>
+
+  <script src="panel.js"></script>
+</body>
+</html>

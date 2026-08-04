@@ -1,0 +1,35 @@
+appId: com.playwright-page-shot.app
+productName: 场景录制助手
+directories:
+  output: dist
+  buildResources: build
+files:
+  - main/**/*
+  - renderer/**/*
+  - src/**/*
+  - package.json
+  - "!node_modules/playwright-core/lib/server/dispatcher/**/*"
+  - "!node_modules/playwright-core/lib/server/hash_catalog/**/*"
+# 将 Playwright Chromium 打包进安装包
+extraResources:
+  - from: "C:\\Users\\123\\AppData\\Local\\ms-playwright\\chromium-1234"
+    to: "playwright-browser/chromium-1234"
+    filter:
+      - "**/*"
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: "${productName}-${version}-setup.${ext}"
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]

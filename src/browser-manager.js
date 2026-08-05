@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 
 class BrowserManager {
-  constructor({ recorder, onStateChange, onElementSelected, onSelectionCancelled, panelWindowGetter, userDataDir, onLoginFormDetected, onLoginSubmit }) {
+  constructor({ recorder, onStateChange, onElementSelected, onSelectionCancelled, panelWindowGetter, userDataDir, onLoginFormDetected, onLoginSubmit, onBrowserClosed }) {
     this.recorder = recorder;
     this.onStateChange = onStateChange;
     this.onElementSelected = onElementSelected;
@@ -20,6 +20,7 @@ class BrowserManager {
     this.userDataDir = userDataDir; // ★ 持久化浏览器配置文件目录
     this.onLoginFormDetected = onLoginFormDetected; // ★ 登录表单检测回调
     this.onLoginSubmit = onLoginSubmit; // ★ 登录提交捕获回调
+    this.onBrowserClosed = onBrowserClosed; // ★ 浏览器关闭回调
     this.browser = null; // ★ launchPersistentContext 模式下不再使用 browser 对象
     this.context = null;
     this.pages = new Map(); // pageId -> { page, url }
@@ -106,6 +107,7 @@ class BrowserManager {
       this.context = null;
       this.browser = null;
       this._exposeFunctionsRegistered = false; // ★ 重置以便下次启动重新注册
+      if (this.onBrowserClosed) this.onBrowserClosed(); // ★ 通知面板浏览器已关闭
     });
 
     // 如果是持久化模式，browser 为 null；否则使用已创建的 browser 监听断开
@@ -524,6 +526,27 @@ class BrowserManager {
       this._pageIdMap.clear();
       this._activePageId = null;
       this._exposeFunctionsRegistered = false; // ★ 重置以便下次启动重新注册
+    }
+  }
+
+  /** ★ 获取 Playwright 上下文的所有 cookies（用于同步到 webview） */
+  async getCookies() {
+    if (!this.context) return [];
+    try {
+      return await this.context.cookies();
+    } catch (e) {
+      console.warn('[BrowserManager] 获取 cookies 失败:', e.message);
+      return [];
+    }
+  }
+
+  /** ★ 设置 Playwright 上下文的 cookies（用于从 webview 同步） */
+  async setCookies(cookies) {
+    if (!this.context || !cookies || cookies.length === 0) return;
+    try {
+      await this.context.addCookies(cookies);
+    } catch (e) {
+      console.warn('[BrowserManager] 设置 cookies 失败:', e.message);
     }
   }
 }

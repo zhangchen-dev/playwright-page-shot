@@ -1,0 +1,95 @@
+/**
+ * 设置视图样式 - 凭证管理区域
+ * 从原 panel.css 拆分
+ */
+
+/* ===== ★ 凭证管理区域 ===== */
+
+.cred-domain-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  margin-bottom: 3px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cred-domain-name {
+  color: var(--accent-blue-light);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.cred-domain-count {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: normal;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+.cred-list {
+  margin-left: 16px;
+  border-left: 2px solid rgba(19, 34, 64, 0.1);
+  padding-left: 10px;
+  margin-top: 2px;
+  margin-bottom: 8px;
+}
+
+.cred-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  margin-bottom: 3px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  transition: all 0.15s;
+}
+
+.cred-item:hover {
+  background: var(--bg-hover);
+}
+
+.cred-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cred-item-username {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cred-item-lastused {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.cred-delete-btn {
+  padding: 3px 10px;
+  font-size: 10px;
+  background: var(--accent-red-bg);
+  color: var(--accent-red-light);
+  border: 1px solid var(--border-danger);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.cred-delete-btn:hover {
+  background: rgba(250, 67, 50, 0.15);
+}

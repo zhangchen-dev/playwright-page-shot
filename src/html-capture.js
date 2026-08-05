@@ -170,6 +170,98 @@ class HtmlCapture {
   }
 
   /**
+   * ★ 从预捕获的数据处理快照（用于应用内 webview 模式）
+   * 不需要 Playwright page 对象，直接使用渲染进程捕获的 HTML 和 CSS 数据
+   * @param {object} options
+   * @param {string} options.url - 页面 URL
+   * @param {string} options.html - 已清理的 HTML（由 webview executeJavaScript 获取）
+   * @param {Array} options.cssContents - 预获取的 CSS 内容 [{url, content}, ...]
+   * @param {string} options.stepId - 步骤ID
+   * @param {string|null} options.nextStepId - 下一步ID
+   * @param {Array} options.marks - 当前步骤的标记元素列表
+   * @param {boolean} options.isEndRecording - 是否是录制的最后一步
+   * @returns {object} 快照对象
+   */
+  async processFromCapturedData({ url, html, cssContents, stepId, nextStepId, marks, isEndRecording }) {
+    const currentUrl = url || '';
+    const rawHtml = html || '<!DOCTYPE html><html><body></body></html>';
+
+    // 1. 使用 cheerio 解析 HTML
+    const $ = cheerio.load(rawHtml, { decodeEntities: false });
+    let cssContent = '';
+
+    // 2. 处理预获取的外部 CSS（替换 page.evaluate fetch 逻辑）
+    for (const cssItem of (cssContents || [])) {
+      if (cssItem.content) {
+        const fixedCss = fixCssUrls(cssItem.content, cssItem.url);
+        cssContent += '/* ===== ' + cssItem.url + ' ===== */\n' + fixedCss + '\n\n';
+      }
+    }
+    // 移除所有外部 CSS link 标签（内容已内联到 cssContent）
+    $('link[rel="stylesheet"]').remove();
+
+    // 3. 提取内联 style 标签
+    $('style').each((_, el) => {
+      const styleContent = $(el).text() || '';
+      const fixedStyle = fixCssUrls(styleContent, currentUrl);
+      cssContent += '/* ===== inline style ===== */\n' + fixedStyle + '\n\n';
+      $(el).remove();
+    });
+
+    cssContent = deduplicateCSS(cssContent);
+
+    // 4. 处理资源 URL（相对路径转绝对路径）
+    this._fixResourceUrls($, currentUrl);
+
+    // 5. 添加 CSS 引用
+    const cssFilename = stepId + '.css';
+    if (cssContent.trim()) {
+      const cssLink = `<link rel="stylesheet" href="./${cssFilename}">`;
+      if ($('head').length) {
+        $('head').append(cssLink);
+      } else if ($('body').length) {
+        $('body').before(cssLink);
+      }
+    }
+
+    // 6. iframe 处理 — webview 模式下跳过（返回空数组）
+    const iframeFiles = [];
+
+    // 7. 添加步骤跳转脚本
+    const currentStepMarks = marks || [];
+    const currentStepElementIds = currentStepMarks.map((m) => m.elementId).filter(Boolean);
+
+    if (currentStepElementIds.length > 0 && !isEndRecording && nextStepId) {
+      const navScript = this._buildNavScript(currentStepElementIds, nextStepId);
+      if ($('body').length) {
+        $('body').append(navScript);
+      }
+    }
+
+    const htmlFilename = stepId + '.html';
+    const htmlContent = $.html();
+
+    return {
+      stepId,
+      nextStepId,
+      htmlContent,
+      cssContent,
+      htmlFile: htmlFilename,
+      cssFile: cssFilename,
+      elementIds: currentStepElementIds,
+      marks: currentStepMarks.map((m) => ({
+        elementId: m.elementId,
+        mainTitle: m.mainTitle,
+        subTitle: m.subTitle || '',
+        isInIframe: !!m.isInIframe,
+        iframeSrc: m.iframeSrc || '',
+      })),
+      isEndRecording,
+      iframeFiles,
+    };
+  }
+
+  /**
    * 修复资源 URL（相对路径转绝对路径）
    */
   _fixResourceUrls($, baseUrl) {

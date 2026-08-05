@@ -1,0 +1,247 @@
+/**
+ * 后台管理视图样式 - 已录制内容面板 + 场景卡片
+ * 从原 panel.css 拆分
+ */
+
+/* ===== 已录制内容（可展开面板） ===== */
+
+.recorded-exports-section {
+  padding: 8px 12px;
+}
+
+.recorded-exports-header {
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+  font-weight: 600;
+}
+
+.recorded-exports-header:hover {
+  background: rgba(19, 34, 64, 0.05);
+}
+
+.recorded-exports-content {
+  margin-top: 4px;
+}
+
+/* 单个录制条目 */
+.recorded-export-header {
+  padding: 7px 10px;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+  font-weight: 600;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 3px;
+}
+
+.recorded-export-header:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-accent);
+}
+
+.recorded-export-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 步骤列表 */
+.recorded-step-list {
+  display: none;
+  margin-left: 16px;
+  border-left: 2px solid rgba(19, 34, 64, 0.1);
+  padding-left: 10px;
+  margin-top: 2px;
+  margin-bottom: 6px;
+}
+
+/* 单个步骤条目 */
+.recorded-step-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  margin-bottom: 3px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  transition: all 0.15s;
+}
+
+.recorded-step-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-accent);
+}
+
+.recorded-step-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 8px;
+  color: var(--text-secondary);
+  cursor: help;
+}
+
+/* 预览按钮（小尺寸） */
+.recorded-step-preview-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  background: var(--accent-blue-bg);
+  color: var(--accent-blue-light);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.recorded-step-preview-btn:hover {
+  background: rgba(25, 102, 255, 0.12);
+}
+
+.recorded-step-preview-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ===== ★ 后台管理 — 场景卡片 ===== */
+
+.scenario-card {
+  background: var(--bg-section);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  margin-bottom: 12px;
+  transition: all 0.15s;
+}
+
+.scenario-card:hover {
+  border-color: var(--border-accent);
+  background: rgba(19, 34, 64, 0.03);
+}
+
+/* ★ 当前预览的场景卡片高亮 */
+.scenario-card-active {
+  border-color: var(--accent-blue);
+  background: var(--accent-blue-bg);
+  box-shadow: 0 0 0 1px var(--accent-blue), 0 2px 8px rgba(25, 102, 255, 0.12);
+}
+
+.scenario-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.scenario-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.scenario-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scenario-card-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.scenario-card-meta {
+  font-size: 10px;
+  color: var(--text-dark);
+  margin-top: 4px;
+}
+
+.scenario-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.scenario-action-btn {
+  padding: 6px 12px;
+  font-size: 11px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+}
+
+.scenario-action-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-accent);
+}
+
+.scenario-action-btn.preview {
+  background: var(--accent-blue-bg);
+  color: var(--accent-blue-light);
+  border-color: var(--border-accent);
+}
+
+.scenario-action-btn.preview:hover {
+  background: rgba(25, 102, 255, 0.12);
+}
+
+.scenario-action-btn.download {
+  background: var(--accent-orange-bg);
+  color: var(--accent-orange-light);
+  border-color: var(--border-warning);
+}
+
+.scenario-action-btn.download:hover {
+  background: rgba(255, 147, 38, 0.15);
+}
+
+.scenario-action-btn.upload {
+  background: var(--accent-green-bg);
+  color: var(--accent-green);
+  border-color: rgba(10, 199, 103, 0.4);
+}
+
+.scenario-action-btn.upload:hover {
+  background: rgba(10, 199, 103, 0.15);
+}
+
+.scenario-action-btn.delete {
+  background: var(--accent-red-bg);
+  color: var(--accent-red-light);
+  border-color: var(--border-danger);
+}
+
+.scenario-action-btn.delete:hover {
+  background: rgba(250, 67, 50, 0.15);
+}
+
+.scenario-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

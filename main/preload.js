@@ -29,15 +29,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ===== 浏览器状态 =====
   isBrowserLaunched: () => ipcRenderer.invoke('is-browser-launched'),
 
+  // ★ 获取注入脚本内容（用于应用内 webview 元素选择）
+  getInjectScript: (scriptName) => ipcRenderer.invoke('get-inject-script', scriptName),
+
+  // ★ Cookie 同步 — Playwright ↔ webview
+  syncCookiesToWebview: () => ipcRenderer.invoke('sync-cookies-to-webview'),
+  syncCookiesFromWebview: () => ipcRenderer.invoke('sync-cookies-from-webview'),
+
+  // ★ 获取 webview preload 脚本路径
+  getWebviewPreloadPath: () => ipcRenderer.invoke('get-webview-preload-path'),
+
   // ===== 本地预览（应用内 Playwright 浏览器） =====
   previewExport: () => ipcRenderer.invoke('preview-export'),
   previewHtmlFile: (filePath) => ipcRenderer.invoke('preview-html-file', filePath),
   getRecordedExports: () => ipcRenderer.invoke('get-recorded-exports'),
 
-  // ★ 后台管理：删除 / 下载 / 上传 / 获取存储目录
+  // ★ 后台管理：删除 / 下载 / 上传 / 同步到生产 / 获取存储目录
   deleteRecording: (dirPath) => ipcRenderer.invoke('delete-recording', dirPath),
   downloadRecording: (dirPath) => ipcRenderer.invoke('download-recording', dirPath),
   uploadRecording: (dirPath) => ipcRenderer.invoke('upload-recording', dirPath),
+  syncToPrd: (dirPath) => ipcRenderer.invoke('sync-to-prd', dirPath),
   getAppRecordingsDir: () => ipcRenderer.invoke('get-app-recordings-dir'),
 
   // ★ 凭证管理（密码快捷登录）
@@ -74,6 +85,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ★ 登录提交捕获事件
   onLoginSubmit: (callback) => {
     ipcRenderer.on('loginSubmit', (event, data) => callback(data));
+  },
+  // ★ 浏览器关闭事件
+  onBrowserClosed: (callback) => {
+    ipcRenderer.on('browserClosed', (event) => callback());
   },
 
   // ===== 清理 =====

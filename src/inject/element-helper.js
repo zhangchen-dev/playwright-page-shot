@@ -82,20 +82,24 @@
       const elementId = '__rec_el_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
       e.target.id = elementId;
 
-      // 通过 exposeFunction 桥接回调通知主进程
-      if (typeof window.__recOnElementSelected === 'function') {
-        window.__recOnElementSelected({
-          elementId: elementId,
-          tagName: e.target.tagName,
-          text: (e.target.textContent || '').substring(0, 50).trim(),
-          className: e.target.className || '',
-          isInIframe: false,
-          iframeSrc: '',
-        });
+      // 通过回调通知主进程（try/finally 确保即使回调异常也能退出选择模式）
+      try {
+        if (typeof window.__recOnElementSelected === 'function') {
+          window.__recOnElementSelected({
+            elementId: elementId,
+            tagName: e.target.tagName,
+            text: (e.target.textContent || '').substring(0, 50).trim(),
+            className: e.target.className || '',
+            isInIframe: false,
+            iframeSrc: '',
+          });
+        }
+      } catch (err) {
+        console.error('[recHelper] __recOnElementSelected 回调异常:', err);
+      } finally {
+        // ★ 无论回调是否异常，都必须退出选择模式，否则页面无法恢复交互
+        disableSelectionMode();
       }
-
-      // 选择完成后自动退出选择模式
-      disableSelectionMode();
     }
   }
 

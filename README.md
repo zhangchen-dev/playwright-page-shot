@@ -92,24 +92,51 @@ npm run build:linux  # Linux AppImage
 ## 项目结构
 
 ```
-main/                    # Electron 主进程
-├── main.js              # 应用入口：窗口创建、生命周期
-├── ipc-handler.js       # IPC 消息中转
-└── preload.js           # 安全 IPC 接口暴露
+main/                              # Electron 主进程
+├── main.js                        # 应用入口：窗口创建、生命周期
+├── preload.js                     # 安全 IPC 接口暴露
+└── ipc/                           # IPC 处理器（按功能拆分）
+    ├── index.js                   # 聚合注册入口
+    ├── recorder-ipc.js            # 录制动作 + 元素选择 + 页面操作
+    ├── window-ipc.js              # 窗口控制（最小化/置顶/缩放）
+    ├── webview-ipc.js             # 注入脚本/preload路径/cookie同步
+    ├── credential-ipc.js          # 凭证 CRUD
+    ├── recording-mgmt-ipc.js      # 已录制列表/删除/下载/上传/同步
+    └── preview-ipc.js             # 预览/保存目录
 
-renderer/                # 面板渲染进程
-├── panel.html           # 面板 HTML
-├── panel.css            # 面板样式（暗色主题 + 蓝调高亮）
-└── panel.js             # 面板逻辑
+renderer/                          # 面板渲染进程（ES Modules）
+├── panel.html                     # 面板 HTML
+├── styles/                        # 样式（按功能拆分）
+│   ├── theme.css                  # 设计令牌 + 基础重置
+│   ├── layout.css                 # 三栏布局/侧栏/右栏/webview容器
+│   ├── components.css             # 按钮/输入框/对话框/toast
+│   ├── recording.css              # 录制面板/mark UI/快捷登录
+│   ├── management.css             # 场景卡片/已录制内容
+│   └── settings.css               # 凭证管理
+└── modules/                       # 渲染层逻辑（按菜单功能拆分）
+    ├── app.js                     # 入口：事件监听 + 面板渲染 + 初始化
+    ├── common/                    # 公共方法/状态
+    │   ├── state.js  api.js  dom.js  feedback.js
+    │   ├── layout.js  webview-controls.js  input-preserve.js
+    ├── recording/                 # 菜单：页面录制
+    │   ├── internal/              # 对内录制（webview）
+    │   ├── external/              # 对外录制（Playwright）
+    │   └── shared/                # 录制共用（UI/动作/导航/凭证）
+    ├── management/                # 菜单：后台管理
+    ├── settings/                  # 菜单：设置
+    └── preview/                   # 跨菜单共用预览功能
 
-src/                     # 核心业务逻辑
-├── browser-manager.js   # Playwright 浏览器管理 + 元素选择桥接
-├── recorder.js          # 录制状态机（单一数据源）
-├── html-capture.js      # HTML 快照捕获 + CSS/资源处理
-├── css-utils.js         # CSS URL 修复 + 去重
-├── export.js            # 文件批量导出
-└── inject/
-    └── element-helper.js  # 轻量元素选择注入脚本
+src/                               # 核心业务逻辑
+├── browser-manager.js             # Playwright 浏览器管理 + 元素选择桥接
+├── recorder.js                    # 录制状态机（单一数据源）
+├── credential-store.js            # 凭证加密存储（DPAPI/Keychain）
+├── html-capture.js                # HTML 快照捕获 + CSS/资源处理
+├── css-utils.js                   # CSS URL 修复 + 去重
+├── export.js                      # 文件批量导出
+└── inject/                        # 内/外共用注入脚本
+    ├── element-helper.js          # 元素选择辅助
+    ├── credential-helper.js       # 登录表单检测 + 凭证填充
+    └── webview-preload.js         # webview contextBridge 桥接
 ```
 
 ## 架构

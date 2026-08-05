@@ -92,6 +92,7 @@ class Recorder {
       case 'completeMark': return this._completeMark(msg);
       case 'deleteMark': return this._deleteMark(msg);
       case 'nextStep': return this._nextStep(msg);
+      case 'nextStepWebview': return this._nextStepWebview(msg); // ★ webview 模式
       case 'addSubModule': return this._addSubModule(msg);
       case 'addMainModule': return this._addMainModule(msg);
       case 'endAndSave': return this._endAndSave(msg);
@@ -166,8 +167,8 @@ class Recorder {
     const marks = this.pageMarks.get(activePageId);
     if (marks && markIndex >= 0 && markIndex < marks.length) {
       const removed = marks.splice(markIndex, 1)[0];
-      // 移除 DOM 上的标记 ID
-      if (removed && removed.elementId && this.browserManager) {
+      // 移除 DOM 上的标记 ID（webview 模式由面板处理，此处仅处理 Playwright 页面）
+      if (removed && removed.elementId && this.browserManager && activePageId !== 'webview') {
         this.browserManager.removeElementId(removed.elementId).catch(() => {});
       }
       console.log(`[Recorder] 标记已删除: index=${markIndex}`);
@@ -220,13 +221,57 @@ class Recorder {
     }
   }
 
+  /**
+   * ★ 应用内 webview 模式的步骤捕获
+   * 使用渲染进程预捕获的 HTML/CSS 数据，不需要 Playwright page 对象
+   */
+  async _nextStepWebview(msg) {
+    const { url, html, cssContents, isEndRecording: forceEnd } = msg;
+    const activePageId = 'webview';
+    const marks = this.pageMarks.get(activePageId) || [];
+
+    try {
+      this._notifyCaptureProgress('正在捕获页面（应用内浏览器）...');
+
+      const capture = new HtmlCapture(null); // 不需要 page 对象
+      const snapshot = await capture.processFromCapturedData({
+        url,
+        html,
+        cssContents,
+        stepId: this.currentStepId,
+        nextStepId: this.nextStepId,
+        marks,
+        isEndRecording: !!forceEnd,
+      });
+
+      const subMod = this._getCurrentSubModule();
+      if (subMod) {
+        subMod.steps.push(snapshot);
+      }
+
+      this.currentStepId = this.nextStepId;
+      this.nextStepId = this._generateStepId();
+      this.pageMarks.set(activePageId, []);
+
+      console.log(`[Recorder] webview 步骤已捕获: ${this.currentStepId}`);
+      this._notifyStateChange();
+      return { stateChanged: true };
+    } catch (err) {
+      console.error('[Recorder] webview 捕获步骤失败:', err);
+      return { stateChanged: false, response: { type: 'error', message: '捕获失败: ' + err.message } };
+    }
+  }
+
   async _addSubModule(msg) {
     const { pageId, modName, introduction } = msg;
     const activePageId = pageId || this._getActivePageId();
 
     const marks = this.pageMarks.get(activePageId) || [];
     if (marks.length > 0) {
-      const result = await this._nextStep(msg);
+      // ★ webview 模式使用 _nextStepWebview（不需要 Playwright page）
+      const result = (activePageId === 'webview')
+        ? await this._nextStepWebview(msg)
+        : await this._nextStep(msg);
       if (!result.stateChanged) return result;
     }
 
@@ -264,7 +309,10 @@ class Recorder {
 
     const marks = this.pageMarks.get(activePageId) || [];
     if (marks.length > 0) {
-      const result = await this._nextStep(msg);
+      // ★ webview 模式使用 _nextStepWebview（不需要 Playwright page）
+      const result = (activePageId === 'webview')
+        ? await this._nextStepWebview(msg)
+        : await this._nextStep(msg);
       if (!result.stateChanged) return result;
     }
 
@@ -320,7 +368,10 @@ class Recorder {
 
     const marks = this.pageMarks.get(activePageId) || [];
     if (this.phase === 'recording' && marks.length > 0) {
-      const captureResult = await this._nextStep(msg);
+      // ★ webview 模式使用 _nextStepWebview（不需要 Playwright page）
+      const captureResult = (activePageId === 'webview')
+        ? await this._nextStepWebview(msg)
+        : await this._nextStep(msg);
       if (!captureResult.stateChanged) return captureResult;
     }
 

@@ -3,9 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src 'self' file:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src 'self' file: http: https:;">
   <title>场景录制助手</title>
-  <link rel="stylesheet" href="panel.css">
+  <link rel="stylesheet" href="styles/theme.css">
+  <link rel="stylesheet" href="styles/layout.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="styles/recording.css">
+  <link rel="stylesheet" href="styles/management.css">
+  <link rel="stylesheet" href="styles/settings.css">
 </head>
 <body>
   <div id="layout">
@@ -21,35 +26,75 @@
         <span class="menu-text">后台管理</span>
       </div>
       <div class="sidebar-spacer"></div>
+      <div class="menu-item" data-view="settings">
+        <span class="menu-icon">⚙️</span>
+        <span class="menu-text">设置</span>
+      </div>
     </aside>
 
     <!-- ② 中间列 -->
     <main id="mainColumn" class="main-column">
       <div class="middle-header">
         <span class="middle-title" id="middleTitle">页面录制</span>
-        <button id="toggleRightBtn" class="toggle-right-btn" title="展开/收起侧栏">▶</button>
       </div>
       <div class="url-bar" id="urlBar">
-        <span class="url-label">🔗</span>
-        <input type="text" id="urlInput" placeholder="输入网址后回车打开浏览器..." class="url-input">
+        <label class="url-label" for="urlInput">输入页面url</label>
+        <input type="text" id="urlInput" placeholder="https://..." class="url-input">
         <button id="navigateBtn" class="url-go-btn">→</button>
+      </div>
+      <div class="browser-mode-row" id="browserModeRow">
+        <span class="browser-mode-label">浏览器打开方式</span>
+        <div class="browser-mode-switch" id="browserModeToggle">
+          <span class="switch-option" data-mode="external">外层窗口</span>
+          <label class="switch-toggle">
+            <input type="checkbox" id="browserModeSwitch" checked>
+            <span class="switch-slider"></span>
+          </label>
+          <span class="switch-option active" data-mode="in-app">应用内</span>
+        </div>
       </div>
       <div id="content" class="content-area"></div>
       <div id="statusBar" class="status-bar"></div>
     </main>
 
+    <!-- 列分界线（展开/收起中间列） -->
+    <div id="columnDivider" class="column-divider">
+      <button id="dividerToggleBtn" class="divider-toggle-btn" title="展开/收起中间列">◀</button>
+    </div>
+
     <!-- ③ 右侧可折叠列 -->
     <aside id="rightColumn" class="right-column collapsed">
       <div class="right-toolbar">
         <span class="right-title" id="rightTitle">录制记录</span>
+        <div class="right-toolbar-actions" id="rightToolbarActions" style="display:none;">
+          <select class="resolution-select" id="resolutionSelect" title="页面尺寸">
+            <option value="1920">🖥️ 1920×1080</option>
+            <option value="1366">💻 1366×768</option>
+          </select>
+          <button class="fit-page-btn" id="fitPageBtn" title="适配页面（按比例缩放到容器）">📐 适配</button>
+          <select class="zoom-select" id="zoomSelect" title="缩放比例">
+            <option value="1.0">100%</option>
+            <option value="0.9">90%</option>
+            <option value="0.8">80%</option>
+            <option value="0.75">75%</option>
+            <option value="0.6">60%</option>
+            <option value="0.5">50%</option>
+          </select>
+          <button class="fullscreen-btn" id="fullscreenBtn" title="全屏预览（ESC 退出）">⛶ 全屏</button>
+        </div>
         <button id="closeRightBtn" class="right-close-btn">✕</button>
       </div>
       <!-- 步骤列表容器（录制视图） -->
       <div id="rightContent" class="right-content"></div>
-      <!-- webview 预览容器（管理视图 / 保存后预览） -->
+      <!-- webview 预览/浏览器容器 -->
       <div id="previewContainer" class="preview-container">
         <div class="preview-loading" id="previewLoading">加载中...</div>
-        <webview id="previewWebview" class="preview-webview-inner" autosize="on"></webview>
+        <!-- ★ 滚动容器：webview 以标准尺寸渲染，溢出滚动 -->
+        <div class="webview-scroll-wrapper" id="webviewScrollWrapper">
+          <div class="webview-scale-wrapper" id="webviewScaleWrapper">
+            <webview id="previewWebview" class="preview-webview-inner" partition="persist:webview"></webview>
+          </div>
+        </div>
       </div>
     </aside>
   </div>
@@ -57,6 +102,6 @@
   <!-- Toast 通知容器 -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="panel.js"></script>
+  <script type="module" src="modules/app.js"></script>
 </body>
 </html>

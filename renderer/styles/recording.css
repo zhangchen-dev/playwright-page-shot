@@ -1,0 +1,411 @@
+/**
+ * 录制视图样式 - 标记列表/模块列表/页面信息/标签页/选择提示/快捷登录/intro
+ * 从原 panel.css 拆分
+ */
+
+/* ===== 标记列表 ===== */
+
+.mark-list { margin-top: 8px; }
+
+.mark-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.mark-item:hover { background: rgba(19, 34, 64, 0.05); }
+
+.mark-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 8px;
+  color: var(--text-primary);
+}
+
+.mark-delete-btn {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent-red);
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.mark-delete-btn:hover { background: #d93021; }
+
+/* ===== 模块列表 ===== */
+
+.module-list {
+  background: var(--bg-section);
+  border-radius: var(--radius-lg);
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(8px);
+}
+
+.module-header {
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+  font-weight: 600;
+}
+
+.module-header:hover { background: rgba(19, 34, 64, 0.05); }
+.module-header.active { background: var(--accent-blue-bg); }
+.module-header.active .module-name { color: var(--accent-blue-light); }
+
+.module-arrow {
+  color: var(--text-dark);
+  font-size: 10px;
+  width: 12px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.module-name { flex: 1; }
+
+.sub-module-list {
+  display: none;
+  margin-left: 16px;
+  border-left: 2px solid rgba(19, 34, 64, 0.1);
+  padding-left: 12px;
+  margin-top: 4px;
+}
+
+.sub-module-header {
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+
+.sub-module-header:hover { background: rgba(19, 34, 64, 0.05); }
+.sub-module-header.active { background: var(--accent-blue-bg); }
+.sub-module-header.active .sub-module-name { color: var(--accent-blue-light); font-weight: 600; }
+
+.sub-module-arrow {
+  color: var(--text-dark);
+  font-size: 9px;
+  width: 10px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.sub-module-name { flex: 1; }
+
+.step-list {
+  display: none;
+  margin-left: 12px;
+  border-left: 2px solid rgba(19, 34, 64, 0.08);
+  padding-left: 10px;
+  margin-top: 2px;
+}
+
+.step-item {
+  padding: 3px 6px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  border-radius: 4px;
+}
+
+/* ===== 快捷键提示 ===== */
+
+.shortcut-hint {
+  display: block;
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.step-info {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+/* ===== 页面信息 ===== */
+
+.page-info {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.page-info-url {
+  color: var(--accent-blue-light);
+}
+
+/* ===== 标签页列表 ===== */
+
+.tab-section {
+  margin-bottom: 8px;
+}
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  margin-bottom: 3px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 11px;
+}
+
+.tab-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-accent);
+}
+
+.tab-item.active {
+  background: var(--accent-blue-bg);
+  border-color: var(--accent-blue);
+}
+
+.tab-url {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.tab-item.active .tab-url {
+  color: var(--accent-blue-light);
+}
+
+.tab-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  background: var(--accent-blue);
+  color: #fff;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+/* ===== 选择模式提示 ===== */
+
+.selection-active-hint {
+  background: var(--accent-red-bg);
+  border: 1px solid var(--border-danger);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--accent-red-light);
+  text-align: center;
+}
+
+/* ===== Toggle Switch (showNextStep) ===== */
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding: 4px 0;
+}
+
+.toggle-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  transition: 0.2s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 2px;
+  bottom: 2px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition: 0.2s;
+}
+
+.switch input:checked + .slider {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.switch input:checked + .slider:before {
+  transform: translateX(16px);
+  background: #ffffff;
+}
+
+/* ===== Introduction Box ===== */
+
+.intro-toggle-row {
+  margin-top: 8px;
+}
+
+.btn-link {
+  background: none !important;
+  border: none !important;
+  color: var(--accent-blue-light) !important;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 0 !important;
+  text-decoration: none;
+  width: 100%;
+  text-align: left;
+}
+
+.btn-link:hover {
+  text-decoration: underline;
+}
+
+.intro-box {
+  margin-top: 6px;
+  padding: 8px;
+  background: var(--bg-section);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+/* ===== Intro Badge ===== */
+
+.intro-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  background: var(--accent-green-bg, rgba(34, 197, 94, 0.15));
+  color: var(--accent-green);
+  border-radius: 3px;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+/* ===== ★ 快捷登录区域 ===== */
+
+.quick-login-section {
+  padding: 10px 12px;
+}
+
+.quick-login-domain {
+  font-size: 11px;
+  color: var(--accent-blue-light);
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  background: var(--accent-blue-bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-accent);
+}
+
+.quick-login-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: all 0.15s;
+}
+
+.quick-login-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-accent);
+}
+
+.quick-login-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.quick-login-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.quick-login-username {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-login-lastused {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.quick-login-fill-btn {
+  padding: 6px 12px;
+  font-size: 11px;
+  background: var(--accent-blue);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.quick-login-fill-btn:hover {
+  background: #4086ff;
+}
+
+.quick-login-fill-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

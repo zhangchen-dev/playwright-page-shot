@@ -1,0 +1,68 @@
+/**
+ * 主题 Tokens - 亮色蓝调主题（薪福通 Token）
+ * 从原 panel.css 拆分：:root 变量 + 基础重置 + body
+ */
+
+:root {
+  /* ===== 薪福通 Token · 亮色蓝调主题 ===== */
+  /* 主色 / 信息色（info-regular） */
+  --accent-blue: #1966ff;
+  --accent-blue-light: #1966ff;            /* 强调文字色，沿用主色 */
+  --accent-blue-bg: #ebf3ff;               /* info-light 浅蓝背景 */
+
+  /* 布局 / 容器背景 */
+  --bg-primary: #ffffff;                   /* layout-bg-neutral-bright */
+  --bg-section: #f4f7fb;                   /* 偏蓝浅灰，用于侧栏/右栏/卡片 */
+  --bg-input: #ffffff;
+  --bg-card: #ffffff;
+  --bg-hover: rgba(19, 34, 64, 0.05);      /* neutral-bright-hover */
+
+  /* 边框 / 分割线 */
+  --border-subtle: rgba(19, 34, 64, 0.10); /* divider-neutral */
+  --border-input: rgba(19, 34, 64, 0.15);  /* border-neutral */
+  --border-accent: #1966ff;                /* border-accent-regular */
+  --border-danger: #fa4332;                /* border-error-regular */
+  --border-warning: #ff9326;               /* border-warning-regular */
+
+  /* 文字 — 按 token 主要文字颜色标准加深，确保可读性 */
+  --text-primary: rgba(19, 34, 64, 0.95);  /* gray50 — 主要文字 */
+  --text-secondary: rgba(19, 34, 64, 0.92);/* gray40 — 次要文字，接近主色 */
+  --text-muted: rgba(19, 34, 64, 0.88);    /* gray30 — 辅助文字，清晰可读 */
+  --text-dark: rgba(19, 34, 64, 0.78);     /* gray20 — 次要辅助 */
+  --text-disabled: rgba(19, 34, 64, 0.35); /* gray10 — 禁用 */
+
+  /* 功能色 */
+  --accent-red: #fa4332;
+  --accent-red-light: #fa4332;
+  --accent-red-bg: #fff3f2;                /* error-light */
+  --accent-orange: #ff9326;
+  --accent-orange-light: #ff9326;
+  --accent-orange-bg: #fff8eb;             /* warning-light */
+  --accent-green: #0ac767;
+  --accent-green-bg: #edfaf4;              /* success-light */
+
+  /* 圆角 */
+  --radius-sm: 6px;                        /* border-radius-regular */
+  --radius-md: 6px;
+  --radius-lg: 12px;                       /* border-radius-large */
+
+  /* 投影 */
+  --shadow-small: 0 4px 12px 0 rgba(19, 34, 64, 0.08);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* 表单控件继承正文字体，避免输入框/下拉框与标签字体不一致 */
+input, button, select, textarea {
+  font-family: inherit;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  overflow: hidden;
+  height: 100vh;
+  user-select: none;
+  font-size: 13px;
+}

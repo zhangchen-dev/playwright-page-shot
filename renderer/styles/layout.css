@@ -1,0 +1,634 @@
+/**
+ * 布局样式 - 三栏布局骨架 + 右栏预览容器 + 全屏预览
+ * 从原 panel.css 拆分
+ */
+
+/* ===== 三栏布局骨架 ===== */
+
+#layout {
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* ① 左侧菜单栏 */
+.sidebar {
+  width: 64px;
+  min-width: 64px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0;
+  gap: 6px;
+  background: var(--bg-section);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.sidebar-logo {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.menu-item {
+  width: 52px;
+  padding: 8px 4px;
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--text-muted);
+}
+
+.menu-item .menu-icon { font-size: 16px; }
+.menu-item .menu-text { font-size: 10px; text-align: center; line-height: 1.2; }
+
+.menu-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.menu-item.active {
+  background: var(--accent-blue-bg);
+  color: var(--accent-blue-light);
+}
+
+.sidebar-spacer { flex: 1; }
+
+/* ② 中间列 */
+.main-column {
+  width: 380px;
+  min-width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  transition: width 0.2s ease, min-width 0.2s ease;
+  overflow: hidden;
+}
+
+.main-column.collapsed {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.middle-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+}
+
+.middle-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-blue-light);
+}
+
+.toggle-right-btn {
+  -webkit-app-region: no-drag;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.toggle-right-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-accent);
+}
+
+/* 列分界线（展开/收起中间列） */
+.column-divider {
+  width: 6px;
+  min-width: 6px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  position: relative;
+  cursor: default;
+}
+
+.divider-toggle-btn {
+  width: 20px;
+  height: 48px;
+  background: var(--bg-section);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  transition: all 0.15s;
+  -webkit-app-region: no-drag;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.divider-toggle-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent-blue);
+  border-color: var(--border-accent);
+}
+
+/* 中间列折叠时分界线按钮图标翻转 */
+.main-column.collapsed ~ .column-divider .divider-toggle-btn {
+  transform: translateX(-50%) rotate(180deg);
+}
+
+/* ③ 右侧可折叠列 */
+.right-column {
+  width: 380px;
+  min-width: 380px;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg-section);
+  border-left: 1px solid var(--border-subtle);
+  overflow: hidden;
+  transition: width 0.2s ease, min-width 0.2s ease, opacity 0.2s ease;
+}
+
+.right-column.collapsed {
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+}
+
+.right-column.preview-mode {
+  width: 820px;
+  min-width: 820px;
+}
+
+.right-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  height: 38px;
+  background: var(--bg-section);
+  border-bottom: 1px solid var(--border-subtle);
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.right-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+}
+
+.fit-page-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.fit-page-btn:hover {
+  border-color: var(--border-accent);
+  color: var(--accent-blue);
+}
+
+.fit-page-btn.active {
+  background: var(--accent-blue);
+  color: #ffffff;
+  border-color: var(--accent-blue);
+  font-weight: 600;
+}
+
+/* ★ 全屏预览按钮 */
+.fullscreen-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.fullscreen-btn:hover {
+  border-color: var(--border-accent);
+  color: var(--accent-blue);
+}
+
+.fullscreen-btn.active {
+  background: var(--accent-blue);
+  color: #ffffff;
+  border-color: var(--accent-blue);
+  font-weight: 600;
+}
+
+/* ★ 全屏预览模式 — 隐藏左栏+中间列，右栏占满 */
+body.fullscreen-preview #sidebar,
+body.fullscreen-preview #mainColumn,
+body.fullscreen-preview #columnDivider {
+  display: none !important;
+}
+
+body.fullscreen-preview #rightColumn {
+  flex: 1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  border-left: none !important;
+}
+
+body.fullscreen-preview #rightContent {
+  display: none !important;
+}
+
+.zoom-select {
+  padding: 4px 6px;
+  font-size: 11px;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  outline: none;
+}
+
+.resolution-select {
+  padding: 4px 6px;
+  font-size: 11px;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  outline: none;
+}
+
+.right-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.right-close-btn {
+  -webkit-app-region: no-drag;
+  padding: 4px 10px;
+  font-size: 12px;
+  background: var(--accent-red-bg);
+  color: var(--accent-red-light);
+  border: 1px solid var(--border-danger);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.right-close-btn:hover {
+  background: rgba(250, 67, 50, 0.15);
+}
+
+.right-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px;
+}
+
+.right-column.preview-mode .right-content {
+  display: none;
+}
+
+/* ===== 标题栏 ===== */
+.title-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  -webkit-app-region: drag;
+}
+
+.title-icon {
+  font-size: 16px;
+}
+
+.title-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-blue-light);
+  text-shadow: none;
+}
+
+/* ===== URL 导航栏 ===== */
+.url-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  -webkit-app-region: drag;
+}
+
+.url-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+
+.url-input {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 6px 10px;
+  outline: none;
+  transition: all 0.15s;
+  -webkit-app-region: no-drag;
+}
+
+.url-input:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px rgba(25, 102, 255, 0.12);
+}
+
+.url-go-btn {
+  background: var(--accent-blue);
+  border: none;
+  border-radius: var(--radius-md);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: bold;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  -webkit-app-region: no-drag;
+}
+
+.url-go-btn:hover { opacity: 0.9; }
+
+/* ★ 浏览器模式切换 — Switch 开关样式（与 form 同层，无独立背景） */
+.browser-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 0;          /* 与 content-area 同水平内边距，无底边框 */
+  background: transparent;
+  -webkit-app-region: drag;
+}
+
+.browser-mode-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+
+.browser-mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+}
+
+.switch-option {
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: color 0.15s;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.switch-option.active {
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+/* Switch 开关主体 */
+.switch-toggle {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.switch-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--border-input);
+  border-radius: 20px;
+  transition: 0.2s;
+}
+
+.switch-slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background: #ffffff;
+  border-radius: 50%;
+  transition: 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.switch-toggle input:checked + .switch-slider {
+  background: var(--accent-blue);
+}
+
+.switch-toggle input:checked + .switch-slider:before {
+  transform: translateX(16px);
+}
+
+/* ===== 内容区 ===== */
+.content-area {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 16px;
+}
+
+/* ===== 状态栏 ===== */
+.status-bar {
+  padding: 8px 16px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-height: 16px;
+  line-height: 1.5;
+  border-top: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+/* ===== 应用内预览/浏览器容器（webview） — 位于右栏内 ===== */
+
+.preview-container {
+  flex: 1;
+  display: none;
+  flex-direction: column;
+  background: #ffffff;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 右栏预览模式时显示 webview */
+.right-column.preview-mode .preview-container {
+  display: flex;
+}
+
+.preview-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 14px;
+  color: var(--text-muted);
+  display: none;
+  z-index: 10;
+}
+
+.preview-loading.active {
+  display: block;
+}
+
+/* ★ 滚动容器：webview 以标准宽度渲染，溢出可滚动 */
+.webview-scroll-wrapper {
+  flex: 1;
+  overflow: auto;            /* 标准模式下允许滚动 */
+  background: #ffffff;
+  position: relative;
+}
+
+/* ★ 适配页面模式：禁用滚动，webview 缩放到容器宽度 */
+.webview-scroll-wrapper.fit-mode {
+  overflow: hidden;
+}
+
+/* ★ 缩放包装层 — 承载 webview，宽高由 JS 动态设置为视觉尺寸 */
+.webview-scale-wrapper {
+  position: relative;
+  overflow: hidden;          /* ★ 关键：裁剪 webview 布局溢出，防止右侧空白 */
+  /* width/height 由 JS 设置为 缩放后的视觉尺寸 */
+}
+
+/* ★ webview — 宽高由 JS 按分辨率设置，transform 由 JS 按缩放比例设置 */
+.preview-webview-inner {
+  display: flex;
+  border: none;
+  flex-shrink: 0;
+  transform-origin: top left;
+  /* width/height/transform 由 JS 动态控制 */
+}
+
+/* 预览步骤选择器 */
+.preview-step-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-section);
+  border-bottom: 1px solid var(--border-subtle);
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+}
+
+.preview-step-selector select {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 11px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  outline: none;
+  cursor: pointer;
+}
+
+/* ★ 预览步骤上一步/下一步按钮 */
+.preview-step-btn {
+  padding: 2px 8px;
+  font-size: 12px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1.4;
+  font-family: inherit;
+}
+
+.preview-step-btn:hover:not(:disabled) {
+  background: var(--accent-blue-bg);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.preview-step-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 折叠中间列的浮动按钮 */
+.expand-middle-btn {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 60px;
+  background: var(--bg-section);
+  border: 1px solid var(--border-subtle);
+  border-left: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  z-index: 10;
+  transition: all 0.15s;
+}
+
+.expand-middle-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent-blue-light);
+}

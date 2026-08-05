@@ -58,7 +58,6 @@ function createAppIcon() {
 async function createPanelWindow() {
   const primaryDisplay = screen.getPrimaryDisplay();
   const { height: screenHeight } = primaryDisplay.workAreaSize;
-  const { width: screenWidth } = primaryDisplay.workAreaSize;
 
   const panelWidth = 460; // ★ 侧栏64 + 中间380 + 余量
   const panelHeight = Math.min(screenHeight - 40, 780);
@@ -66,15 +65,14 @@ async function createPanelWindow() {
   panelWindow = new BrowserWindow({
     width: panelWidth,
     height: panelHeight,
-    x: screenWidth - panelWidth - 10,
-    y: 20,
+    center: true, // ★ 默认居中显示，不再强制贴右
     title: '场景录制助手',
     resizable: true,
     minimizable: true,
     maximizable: true, // ★ 支持最大化
     frame: true,
     autoHideMenuBar: true,
-    alwaysOnTop: true,
+    alwaysOnTop: false, // ★ 默认不置顶，仅录制模式+浏览器打开时由渲染进程控制置顶
     skipTaskbar: false,
     show: false,  // 先隐藏，加载完再显示
     icon: createAppIcon(),
@@ -139,7 +137,7 @@ function showPanel() {
   if (panelWindow) {
     panelWindow.show();
     panelWindow.focus();
-    panelWindow.setAlwaysOnTop(true);
+    // ★ 不强制置顶，由渲染进程根据录制模式+浏览器状态控制
   } else {
     // 窗口已被销毁，重新创建
     createPanelWindow();
@@ -200,10 +198,14 @@ app.whenReady().then(async () => {
     onLoginSubmit: (data) => {
       notifyPanel('loginSubmit', data);
     },
+    // ★ 浏览器关闭 — 通知面板更新窗口置顶状态
+    onBrowserClosed: () => {
+      notifyPanel('browserClosed', {});
+    },
   });
   recorder.setBrowserManager(browserManager);
 
-  const { setupIpc } = require('./ipc-handler');
+  const { setupIpc } = require('./ipc');
   setupIpc({ recorder, browserManager, panelWindowGetter: () => panelWindow, credStore });
 
   notifyPanel('stateSync', recorder.getState());

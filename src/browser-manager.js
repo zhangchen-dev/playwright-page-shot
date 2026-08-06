@@ -145,6 +145,15 @@ class BrowserManager {
   }
 
   /**
+   * ★ 关闭浏览器 — 关闭持久化上下文，触发 'close' 事件
+   */
+  async close() {
+    if (this.context) {
+      await this.context.close();
+    }
+  }
+
+  /**
    * 注册新页面 — 注入辅助脚本、设置事件监听、追踪焦点
    */
   async _registerPage(page) {

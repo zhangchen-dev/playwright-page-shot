@@ -7,6 +7,7 @@ import { toggleFullscreenPreview, closeRightPanel } from '../preview/preview.js'
 import { rerenderPanel } from '../app.js';
 import { renderManagementView } from '../management/management-view.js';
 import { renderSettingsView } from '../settings/settings-view.js';
+import { showBanner, hideBanner } from './banner.js';
 
 // ★ 根据录制模式 + 浏览器状态 + 浏览器模式，条件控制窗口置顶
 export function updateAlwaysOnTop() {
@@ -60,10 +61,8 @@ export function switchView() {
     item.classList.toggle('active', item.dataset.view === appState.currentView);
   });
 
-  // 重置右栏状态
-  appState.rightColumnOpen = false;
-  appState.middleCollapsed = false;
-  appState.rightPanelMode = 'steps';
+  // ★ 不再重置右栏/中间列状态，保持窗口尺寸稳定（切换菜单不缩放）
+  // 右栏内容由 updateRightPanelState 按优先级决定：当前预览 > 空闲Banner
 
   // 显隐 URL 栏
   const urlBar = document.getElementById('urlBar');
@@ -93,8 +92,82 @@ export function switchView() {
     renderSettingsView();
   }
 
-  updateLayout();
+  // ★ 更新右栏内容（保持打开，避免切换菜单时窗口缩放）
+  updateRightPanelState({ preserveClosed: true });
   updateAlwaysOnTop(); // ★ 切换视图时更新窗口置顶状态
+}
+
+/** ★ 设置右栏标题 */
+function setRightTitle(text) {
+  const el = document.getElementById('rightTitle');
+  if (el) el.textContent = text;
+}
+
+/** ★ 恢复 webview 滚动容器显示 */
+function restoreWebview() {
+  const w = document.getElementById('webviewScrollWrapper');
+  if (w) w.style.display = '';
+}
+
+/**
+ * ★ 右栏状态统一更新（保持窗口尺寸稳定，不因切换菜单而缩放）
+ * 优先级：录制中浏览器 > 当前预览 > 空闲Banner
+ * @param {object} opts.preserveClosed - 切换菜单时保持右栏关闭状态（不强制展开）
+ */
+export function updateRightPanelState(opts) {
+  opts = opts || {};
+  const toolbarActions = document.getElementById('rightToolbarActions');
+
+  // 切换菜单时若用户已收起右栏，保持收起（避免缩放）；其他场景强制展开
+  if (!appState.rightColumnOpen && opts.preserveClosed) {
+    hideBanner();
+    updateLayout();
+    return;
+  }
+
+  // 确保右栏打开
+  appState.rightColumnOpen = true;
+
+  // 1. 录制视图 + 浏览器已打开 → webview（应用内）/ 步骤树（外层）
+  if (appState.currentView === 'recording' && appState.browserLaunched) {
+    hideBanner();
+    if (appState.browserMode === 'in-app') {
+      appState.rightPanelMode = 'preview';
+      if (toolbarActions) toolbarActions.style.display = '';
+      restoreWebview();
+      updateLayout();
+      setRightTitle('应用内浏览器');
+    } else {
+      appState.rightPanelMode = 'steps';
+      if (toolbarActions) toolbarActions.style.display = 'none';
+      updateLayout();
+      rerenderPanel();
+    }
+    return;
+  }
+
+  // 2. 有当前预览 → 保持预览
+  if (appState.currentPreviewDirName) {
+    hideBanner();
+    appState.rightPanelMode = 'preview';
+    restoreWebview();
+    if (toolbarActions) toolbarActions.style.display = '';
+    updateLayout();
+    setRightTitle('页面预览');
+    return;
+  }
+
+  // 3. 空闲 → Banner
+  showRecordingBanner();
+}
+
+/** ★ 显示 Banner（无预览/未录制时在右栏展示说明海报） */
+export function showRecordingBanner() {
+  appState.rightColumnOpen = true;
+  appState.rightPanelMode = 'preview';
+  updateLayout();
+  setRightTitle('使用说明');
+  showBanner();
 }
 
 /** ★ 菜单 + 按钮事件初始化 */

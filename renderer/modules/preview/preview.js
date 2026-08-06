@@ -3,7 +3,8 @@
  */
 import { appState } from '../common/state.js';
 import { updateStatus, showToast } from '../common/feedback.js';
-import { updateLayout } from '../common/layout.js';
+import { updateLayout, showRecordingBanner } from '../common/layout.js';
+import { hideBanner } from '../common/banner.js';
 import { applyFitPage, updateWebviewScale } from '../common/webview-controls.js';
 import { disableWebviewSelectionMode } from '../recording/internal/webview-recording.js';
 import { renderPreviewStepSelector } from './step-selector.js';
@@ -55,6 +56,9 @@ export async function openPreview(filePath, htmlFiles, dirName) {
   const toolbarActions = document.getElementById('rightToolbarActions');
   if (toolbarActions) toolbarActions.style.display = '';
 
+  // ★ 隐藏 Banner（向上滚动移除动画），露出下方 webview 预览页面
+  hideBanner();
+
   updateLayout();
 
   // 渲染步骤选择器
@@ -84,21 +88,12 @@ export async function showInAppPreview(filePath) {
   await openPreview(filePath);
 }
 
-/** 关闭右栏 */
+/** ★ 关闭预览 — 清除预览状态后回退到 Banner（不再完全收起右栏，避免切换缩放） */
 export function closeRightPanel() {
   // ★ 直接移除全屏类（避免重复 updateLayout）
   document.body.classList.remove('fullscreen-preview');
   const fsBtn = document.getElementById('fullscreenBtn');
   if (fsBtn) fsBtn.classList.remove('active');
-
-  appState.rightColumnOpen = false;
-  appState.middleCollapsed = false;
-  const webview = document.getElementById('previewWebview');
-  if (webview) webview.src = 'about:blank';
-
-  // ★ 隐藏工具栏操作
-  const toolbarActions = document.getElementById('rightToolbarActions');
-  if (toolbarActions) toolbarActions.style.display = 'none';
 
   // ★ 重置适配/缩放状态
   if (appState.fitPageEnabled) applyFitPage(false);
@@ -112,10 +107,16 @@ export function closeRightPanel() {
 
   // ★ 清除预览状态和高亮
   appState.currentPreviewDirName = null;
+  appState.currentPreviewFiles = [];
   appState.webviewRecordingMode = false;
   updateScenarioCardHighlight();
 
-  updateLayout();
+  // ★ 录制中浏览器已开 → 保持 webview；否则回退到 Banner
+  if (appState.currentView === 'recording' && appState.browserLaunched) {
+    updateLayout();
+  } else {
+    showRecordingBanner();
+  }
   updateStatus('', '');
 }
 

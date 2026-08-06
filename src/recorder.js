@@ -97,6 +97,7 @@ class Recorder {
       case 'addMainModule': return this._addMainModule(msg);
       case 'endAndSave': return this._endAndSave(msg);
       case 'clearRecording': return this._clearRecording(msg);
+      case 'continueRecording': return this._continueRecording(msg);
       default: return null;
     }
   }
@@ -449,6 +450,34 @@ class Recorder {
     return { stateChanged: true };
   }
 
+  /**
+   * ★ 继续录制 — 从已保存的 recording_data.json 恢复录制状态
+   */
+  _continueRecording(msg) {
+    const data = msg.data;
+    if (!data || !data.mainModules) {
+      return { stateChanged: false, response: { type: 'error', message: '录制数据无效' } };
+    }
+    this.sceneConfig = data.sceneConfig || { sceneTitle: '', sceneSubTitle: '', sceneName: '' };
+    this.sceneCode = data.sceneCode || '';
+    this.mainModules = data.mainModules;
+    this.currentMainModuleIndex = data.currentMainModuleIndex ?? -1;
+    this.currentSubModuleIndex = data.currentSubModuleIndex ?? -1;
+    this.stepCount = data.stepCount || 0;
+    this.elementIdCounter = 0;
+    this.environment = data.environment || 'local';
+    this.envBaseUrl = data.envBaseUrl || '';
+    this.resourceBaseUrl = '';
+    this.phase = 'recording';
+    this.currentStepId = this._generateStepId();
+    this.nextStepId = this._generateStepId();
+    this.pageMarks.clear();
+
+    console.log(`[Recorder] 继续录制: ${this.sceneConfig.sceneTitle} (${this.sceneCode}), 已有 ${this.stepCount} 步`);
+    this._notifyStateChange();
+    return { stateChanged: true };
+  }
+
   // ===== 辅助方法 =====
 
   _getActivePageId() {
@@ -474,19 +503,7 @@ class Recorder {
 
   _generateStepId() {
     this.stepCount++;
-    const now = new Date();
-    const timestamp = [
-      now.getFullYear(),
-      String(now.getMonth() + 1).padStart(2, '0'),
-      String(now.getDate()).padStart(2, '0'),
-      '_',
-      String(now.getHours()).padStart(2, '0'),
-      String(now.getMinutes()).padStart(2, '0'),
-      String(now.getSeconds()).padStart(2, '0'),
-      '_',
-      Math.random().toString(36).substring(2, 8),
-    ].join('');
-    return 'step' + this.stepCount + '_' + timestamp;
+    return 'step' + this.stepCount;
   }
 
   _getAllMarks() {

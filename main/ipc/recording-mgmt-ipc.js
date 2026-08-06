@@ -82,6 +82,7 @@ function registerRecordingMgmtIpc({ recorder, panelWindowGetter }) {
           sceneSubTitle,
           stepCount: htmlFiles.length,
           htmlFiles,
+          canContinue: fs.existsSync(path.join(exportDir, 'recording_data.json')),
         });
       }
 
@@ -183,6 +184,22 @@ function registerRecordingMgmtIpc({ recorder, panelWindowGetter }) {
   // ===== ★ 获取应用录制存储目录 =====
   ipcMain.handle('get-app-recordings-dir', async (event) => {
     return recorder.outputDir;
+  });
+
+  // ===== ★ 继续录制 — 加载已保存的录制数据 =====
+  ipcMain.handle('continue-recording', async (event, dirPath) => {
+    try {
+      const dataPath = path.join(dirPath, 'recording_data.json');
+      if (!fs.existsSync(dataPath)) {
+        return { success: false, error: '该场景不支持继续录制（缺少录制数据文件）' };
+      }
+      const data = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
+      const result = await recorder.handleAction('continueRecording', { data });
+      return { success: true, state: recorder.getState() };
+    } catch (err) {
+      console.error('[IPC] continue-recording 失败:', err);
+      return { success: false, error: err.message };
+    }
   });
 
   // ===== ★ 同步录制场景到生产环境 =====

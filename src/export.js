@@ -19,6 +19,10 @@ class Exporter {
     // ★ 导出目录名优先使用 sceneCode
     const dirName = sceneCode || sceneConfig.sceneName || 'recording';
     const exportDir = path.join(this.outputDir, dirName);
+    // ★ 如果目录已存在则清空（继续录制时覆盖旧场景）
+    if (fs.existsSync(exportDir)) {
+      await fs.emptyDir(exportDir);
+    }
     await fs.ensureDir(exportDir);
 
     // 收集所有快照
@@ -63,6 +67,20 @@ class Exporter {
     // 写入配置文件（严格匹配 demo_config.json 格式）
     const config = this._buildConfig(recorder);
     await fs.writeFile(path.join(exportDir, 'demo_config.json'), JSON.stringify(config, null, 4), 'utf-8');
+    fileCount++;
+
+    // ★ 写入完整录制数据（用于"继续录制"功能）
+    const recordingData = {
+      sceneConfig: recorder.sceneConfig,
+      sceneCode: recorder.sceneCode,
+      mainModules: recorder.mainModules,
+      currentMainModuleIndex: recorder.currentMainModuleIndex,
+      currentSubModuleIndex: recorder.currentSubModuleIndex,
+      stepCount: recorder.stepCount,
+      environment: recorder.environment,
+      envBaseUrl: recorder.envBaseUrl,
+    };
+    await fs.writeFile(path.join(exportDir, 'recording_data.json'), JSON.stringify(recordingData), 'utf-8');
     fileCount++;
 
     console.log(`[Exporter] 导出完成: ${fileCount} 个文件保存到 ${exportDir}`);

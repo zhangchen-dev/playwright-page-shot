@@ -8,7 +8,7 @@ import { appState } from './common/state.js';
 import { contentEl, urlInput, navigateBtn, showLoadingOverlay, hideLoadingOverlay } from './common/dom.js';
 import { updateStatus, showToast } from './common/feedback.js';
 import { saveInputValues, restoreInputValues } from './common/input-preserve.js';
-import { initLayoutEvents, updateAlwaysOnTop } from './common/layout.js';
+import { initLayoutEvents, updateAlwaysOnTop, updateRightPanelState } from './common/layout.js';
 import { initBrowserModeControls } from './common/webview-controls.js';
 import { navigateToUrl } from './recording/shared/navigation.js';
 import { renderConfigPhase, renderRecordingPhase, renderRightSteps } from './recording/shared/recording-ui.js';
@@ -94,7 +94,11 @@ api.onBrowserClosed(() => {
   appState.savedCredentials = [];
   updateAlwaysOnTop();
   updateStatus('浏览器已关闭', 'var(--text-secondary)');
-  if (appState.currentView === 'recording') rerenderPanel();
+  if (appState.currentView === 'recording') {
+    rerenderPanel();
+    // ★ 浏览器关闭后右栏展示 Banner（空闲态）
+    updateRightPanelState();
+  }
 });
 
 // ===== URL 导航 =====
@@ -164,3 +168,5 @@ initBrowserModeControls();
 
 // ===== 初始渲染 =====
 rerenderPanel();
+// ★ 启动时录制视图空闲态：右栏展示 Banner
+updateRightPanelState();

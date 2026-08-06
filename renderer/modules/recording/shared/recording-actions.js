@@ -3,9 +3,7 @@
  */
 import { appState } from '../../common/state.js';
 import { api, sendAction } from '../../common/api.js';
-import { updateStatus, showToast, showEnvConfigDialog } from '../../common/feedback.js';
-import { switchView } from '../../common/layout.js';
-import { openPreview } from '../../preview/preview.js';
+import { updateStatus, showToast, showEnvConfigDialog, showConfirmDialog } from '../../common/feedback.js';
 import { captureWebviewData, enableWebviewSelectionMode, disableWebviewSelectionMode } from '../internal/webview-recording.js';
 import { enableExternalSelection, disableExternalSelection } from '../external/external-recording.js';
 import { collectIntroduction } from './recording-ui.js';
@@ -101,20 +99,23 @@ export async function handleEndAndSave() {
     showToast('保存失败：' + (result.message || ''), 'error', 5000);
   } else if (result && result.type === 'saveComplete') {
     showToast('保存成功：' + result.fileCount + ' 个文件', 'success');
-    // ★ 自动切换到管理视图并预览
-    appState.currentView = 'management';
-    switchView();
-    const p = await api.previewExport();
-    if (p && p.success) {
-      // 获取录制文件列表用于步骤选择器
-      const exportsResult = await api.getRecordedExports();
-      if (exportsResult && exportsResult.success && exportsResult.exports.length > 0) {
-        const latest = exportsResult.exports[0];
-        await openPreview(p.filePath, latest.htmlFiles);
-      } else {
-        await openPreview(p.filePath);
+    // ★ 留在录制页面，询问是否关闭浏览器（登录功能未完善，默认保持打开）
+    showConfirmDialog(
+      '录制已完成',
+      '是否关闭浏览器？',
+      async () => {
+        // 确认 → 关闭浏览器（onBrowserClosed 会触发右栏 Banner）
+        await api.closeBrowser();
+      },
+      {
+        confirmText: '关闭浏览器',
+        cancelText: '保持打开',
+        onCancel: () => {
+          // 保持打开：浏览器内容继续显示，可继续浏览或输入新地址
+          updateStatus('浏览器保持打开，可继续浏览或输入新地址', 'var(--text-secondary)');
+        },
       }
-    }
+    );
   }
 }
 

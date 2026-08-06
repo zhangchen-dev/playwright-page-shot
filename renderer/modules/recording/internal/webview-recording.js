@@ -10,10 +10,14 @@ import { updateLayout, updateAlwaysOnTop } from '../../common/layout.js';
 import { updateScenarioCardHighlight } from '../../preview/preview.js';
 import { updateMarkUI } from '../shared/recording-actions.js';
 import { showSavePasswordDialog } from '../shared/credentials-ui.js';
+import { hideBanner } from '../../common/banner.js';
 import { rerenderPanel } from '../../app.js';
 
 /** 在右侧栏 webview 中打开 URL */
 export async function navigateInAppBrowser(url) {
+  // ★ 隐藏 Banner（恢复 webview 容器显示）
+  hideBanner();
+
   // 打开右栏
   appState.rightColumnOpen = true;
   appState.rightPanelMode = 'preview';

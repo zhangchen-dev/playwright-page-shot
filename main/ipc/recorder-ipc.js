@@ -74,6 +74,16 @@ function registerRecorderIpc({ recorder, browserManager }) {
     browserManager.setActivePageId(pageId);
     return { success: true };
   });
+
+  // ★ 关闭浏览器
+  ipcMain.handle('close-browser', async (event) => {
+    try {
+      await browserManager.close();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
 }
 
 module.exports = { registerRecorderIpc };

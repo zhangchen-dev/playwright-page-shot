@@ -6,7 +6,7 @@
 import { appState } from '../../common/state.js';
 import { api } from '../../common/api.js';
 import { updateStatus, showToast } from '../../common/feedback.js';
-import { updateAlwaysOnTop } from '../../common/layout.js';
+import { updateAlwaysOnTop, updateRightPanelState } from '../../common/layout.js';
 
 /** ★ 外层浏览器模式：使用 Playwright 启动/导航 */
 export async function navigateExternal(url) {
@@ -25,6 +25,8 @@ export async function navigateExternal(url) {
     showToast('导航失败: ' + (result?.error || ''), 'error');
   }
   updateAlwaysOnTop();
+  // ★ 外层浏览器打开后：隐藏 Banner，右栏显示步骤树（录制记录）
+  updateRightPanelState();
 }
 
 /** 启用外层浏览器元素选择模式 */

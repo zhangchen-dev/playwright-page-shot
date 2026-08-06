@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <linearGradient id="bg1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#eaf2ff"/>
+      <stop offset="1" stop-color="#f4f7fb"/>
+    </linearGradient>
+    <linearGradient id="accent1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1966ff"/>
+      <stop offset="1" stop-color="#4086ff"/>
+    </linearGradient>
+    <filter id="shadow1" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#132240" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+  <rect width="800" height="600" fill="url(#bg1)"/>
+  <!-- 装饰圆 -->
+  <circle cx="720" cy="90" r="120" fill="#1966ff" opacity="0.06"/>
+  <circle cx="80" cy="540" r="90" fill="#1966ff" opacity="0.05"/>
+
+  <!-- 标题 -->
+  <text x="400" y="78" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei',sans-serif" font-size="34" font-weight="700" fill="#132240" fill-opacity="0.95">场景录制使用指南</text>
+  <rect x="340" y="96" width="120" height="5" rx="2.5" fill="url(#accent1)"/>
+
+  <!-- 步骤卡片 -->
+  <g filter="url(#shadow1)">
+    <!-- 步骤 1 -->
+    <rect x="70" y="150" width="660" height="64" rx="14" fill="#ffffff"/>
+    <circle cx="112" cy="182" r="22" fill="url(#accent1)"/>
+    <text x="112" y="189" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="700" fill="#ffffff">1</text>
+    <text x="150" y="178" font-family="'Microsoft YaHei',sans-serif" font-size="17" font-weight="600" fill="#132240" fill-opacity="0.95">输入页面 URL</text>
+    <text x="150" y="200" font-family="'Microsoft YaHei',sans-serif" font-size="13" fill="#132240" fill-opacity="0.6">在地址栏输入网址，选择应用内或外层浏览器打开</text>
+
+    <!-- 步骤 2 -->
+    <rect x="70" y="228" width="660" height="64" rx="14" fill="#ffffff"/>
+    <circle cx="112" cy="260" r="22" fill="url(#accent1)"/>
+    <text x="112" y="267" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="700" fill="#ffffff">2</text>
+    <text x="150" y="256" font-family="'Microsoft YaHei',sans-serif" font-size="17" font-weight="600" fill="#132240" fill-opacity="0.95">选择页面元素</text>
+    <text x="150" y="278" font-family="'Microsoft YaHei',sans-serif" font-size="13" fill="#132240" fill-opacity="0.6">点击「选择元素」，在页面中点选需要标记的目标</text>
+
+    <!-- 步骤 3 -->
+    <rect x="70" y="306" width="660" height="64" rx="14" fill="#ffffff"/>
+    <circle cx="112" cy="338" r="22" fill="url(#accent1)"/>
+    <text x="112" y="345" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="700" fill="#ffffff">3</text>
+    <text x="150" y="334" font-family="'Microsoft YaHei',sans-serif" font-size="17" font-weight="600" fill="#132240" fill-opacity="0.95">填写标记信息</text>
+    <text x="150" y="356" font-family="'Microsoft YaHei',sans-serif" font-size="13" fill="#132240" fill-opacity="0.6">输入主标题、副标题，选择位置与是否显示下一步</text>
+
+    <!-- 步骤 4 -->
+    <rect x="70" y="384" width="660" height="64" rx="14" fill="#ffffff"/>
+    <circle cx="112" cy="416" r="22" fill="url(#accent1)"/>
+    <text x="112" y="423" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="700" fill="#ffffff">4</text>
+    <text x="150" y="412" font-family="'Microsoft YaHei',sans-serif" font-size="17" font-weight="600" fill="#132240" fill-opacity="0.95">下一步 / 新增模块</text>
+    <text x="150" y="434" font-family="'Microsoft YaHei',sans-serif" font-size="13" fill="#132240" fill-opacity="0.6">完成本页标记后进入下一步，可按模块/主步骤组织流程</text>
+
+    <!-- 步骤 5 -->
+    <rect x="70" y="462" width="660" height="64" rx="14" fill="#ffffff"/>
+    <circle cx="112" cy="494" r="22" fill="#0ac767"/>
+    <text x="112" y="501" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="700" fill="#ffffff">5</text>
+    <text x="150" y="490" font-family="'Microsoft YaHei',sans-serif" font-size="17" font-weight="600" fill="#132240" fill-opacity="0.95">结束并保存</text>
+    <text x="150" y="512" font-family="'Microsoft YaHei',sans-serif" font-size="13" fill="#132240" fill-opacity="0.6">录制完成后保存，可在后台管理中预览与继续录制</text>
+  </g>
+</svg>

@@ -379,3 +379,20 @@ select.input-field option {
   from { transform: translateX(20px); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
 }
+
+/* ===== ★ Tooltip 图标 ===== */
+
+.tooltip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: help;
+  flex-shrink: 0;
+}

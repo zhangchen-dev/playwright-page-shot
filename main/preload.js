@@ -51,6 +51,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   syncToPrd: (dirPath) => ipcRenderer.invoke('sync-to-prd', dirPath),
   getAppRecordingsDir: () => ipcRenderer.invoke('get-app-recordings-dir'),
 
+  // ★ 继续录制
+  continueRecording: (dirPath) => ipcRenderer.invoke('continue-recording', dirPath),
+
+  // ★ 关闭浏览器
+  closeBrowser: () => ipcRenderer.invoke('close-browser'),
+
   // ★ 凭证管理（密码快捷登录）
   getCredentials: (domain) => ipcRenderer.invoke('get-credentials', domain),
   getCredential: (data) => ipcRenderer.invoke('get-credential', data),

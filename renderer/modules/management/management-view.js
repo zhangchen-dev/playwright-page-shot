@@ -72,6 +72,30 @@ export function buildScenarioCard(exp) {
   });
   actions.appendChild(previewBtn);
 
+  // ★ 继续录制（仅有 recording_data.json 的场景显示）
+  if (exp.canContinue) {
+    const continueBtn = el('button', 'scenario-action-btn', '▶ 继续录制');
+    continueBtn.style.background = 'var(--accent-blue-bg)';
+    continueBtn.style.color = 'var(--accent-blue)';
+    continueBtn.style.borderColor = 'var(--border-accent)';
+    continueBtn.addEventListener('click', async () => {
+      continueBtn.disabled = true;
+      continueBtn.textContent = '加载中...';
+      const result = await api.continueRecording(exp.dirPath);
+      continueBtn.disabled = false;
+      continueBtn.textContent = '▶ 继续录制';
+      if (result && result.success) {
+        showToast('已加载场景数据，可继续录制', 'success');
+        // ★ 模拟点击"页面录制"菜单项切换视图（避免循环依赖）
+        const recordingMenuItem = document.querySelector('.menu-item[data-view="recording"]');
+        if (recordingMenuItem) recordingMenuItem.click();
+      } else {
+        showToast('继续录制失败：' + (result?.error || '未知错误'), 'error', 5000);
+      }
+    });
+    actions.appendChild(continueBtn);
+  }
+
   // ★ 全屏预览
   const fullscreenPreviewBtn = el('button', 'scenario-action-btn preview', '⛶ 全屏预览');
   fullscreenPreviewBtn.addEventListener('click', async () => {

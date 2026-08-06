@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e8f0ff"/>
+      <stop offset="1" stop-color="#f4f7fb"/>
+    </linearGradient>
+    <linearGradient id="accent2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1966ff"/>
+      <stop offset="1" stop-color="#4086ff"/>
+    </linearGradient>
+    <filter id="shadow2" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#132240" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+  <rect width="800" height="600" fill="url(#bg2)"/>
+  <circle cx="90" cy="100" r="110" fill="#1966ff" opacity="0.06"/>
+  <circle cx="710" cy="520" r="100" fill="#1966ff" opacity="0.05"/>
+
+  <!-- 标题 -->
+  <text x="400" y="78" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei',sans-serif" font-size="34" font-weight="700" fill="#132240" fill-opacity="0.95">录制快捷键</text>
+  <rect x="340" y="96" width="120" height="5" rx="2.5" fill="url(#accent2)"/>
+
+  <!-- 键帽样式定义 -->
+  <g filter="url(#shadow2)">
+    <!-- 快捷键 1: Alt+A -->
+    <rect x="90" y="150" width="620" height="110" rx="16" fill="#ffffff"/>
+    <g transform="translate(130,185)">
+      <rect x="0" y="0" width="54" height="40" rx="8" fill="#f4f7fb" stroke="#1966ff" stroke-width="1.5"/>
+      <text x="27" y="27" text-anchor="middle" font-family="'Segoe UI',monospace" font-size="14" font-weight="700" fill="#1966ff">Alt</text>
+      <text x="74" y="8" font-family="sans-serif" font-size="18" fill="#132240" fill-opacity="0.5">+</text>
+      <rect x="92" y="0" width="54" height="40" rx="8" fill="url(#accent2)"/>
+      <text x="119" y="27" text-anchor="middle" font-family="'Segoe UI',monospace" font-size="16" font-weight="700" fill="#ffffff">A</text>
+    </g>
+    <text x="330" y="200" font-family="'Microsoft YaHei',sans-serif" font-size="20" font-weight="600" fill="#132240" fill-opacity="0.95">选择元素</text>
+    <text x="330" y="228" font-family="'Microsoft YaHei',sans-serif" font-size="13" fill="#132240" fill-opacity="0.6">进入元素选择模式，点击页面中的目标元素</text>
+
+    <!-- 快捷键 2: Alt+S -->
+    <rect x="90" y="280" width="620" height="110" rx="16" fill="#ffffff"/>
+    <g transform="translate(130,315)">
+      <rect x="0" y="0" width="54" height="40" rx="8" fill="#f4f7fb" stroke="#1966ff" stroke-width="1.5"/>
+      <text x="27" y="27" text-anchor="middle" font-family="'Segoe UI',monospace" font-size="14" font-weight="700" fill="#1966ff">Alt</text>
+      <text x="74" y="8" font-family="sans-serif" font-size="18" fill="#132240" fill-opacity="0.5">+</text>
+      <rect x="92" y="0" width="54" height="40" rx="8" fill="url(#accent2)"/>
+      <text x="119" y="27" text-anchor="middle" font-family="'Segoe UI',monospace" font-size="16" font-weight="700" fill="#ffffff">S</text>
+    </g>
+    <text x="330" y="330" font-family="'Microsoft YaHei',sans-serif" font-size="20" font-weight="600" fill="#132240" fill-opacity="0.95">下一步</text>
+    <text x="330" y="358" font-family="'Microsoft YaHei',sans-serif" font-size="13" fill="#132240" fill-opacity="0.6">保存当前页面快照，进入下一个录制步骤</text>
+
+    <!-- 快捷键 3: Alt+Q -->
+    <rect x="90" y="410" width="620" height="110" rx="16" fill="#ffffff"/>
+    <g transform="translate(130,445)">
+      <rect x="0" y="0" width="54" height="40" rx="8" fill="#f4f7fb" stroke="#1966ff" stroke-width="1.5"/>
+      <text x="27" y="27" text-anchor="middle" font-family="'Segoe UI',monospace" font-size="14" font-weight="700" fill="#1966ff">Alt</text>
+      <text x="74" y="8" font-family="sans-serif" font-size="18" fill="#132240" fill-opacity="0.5">+</text>
+      <rect x="92" y="0" width="54" height="40" rx="8" fill="#fa4332"/>
+      <text x="119" y="27" text-anchor="middle" font-family="'Segoe UI',monospace" font-size="16" font-weight="700" fill="#ffffff">Q</text>
+    </g>
+    <text x="330" y="460" font-family="'Microsoft YaHei',sans-serif" font-size="20" font-weight="600" fill="#132240" fill-opacity="0.95">结束并保存</text>
+    <text x="330" y="488" font-family="'Microsoft YaHei',sans-serif" font-size="13" fill="#132240" fill-opacity="0.6">完成录制并保存场景，可选择关闭或保持浏览器</text>
+  </g>
+</svg>

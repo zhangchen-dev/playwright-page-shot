@@ -27,15 +27,19 @@ export function showToast(message, type, duration) {
 }
 
 /** 确认对话框 */
-export function showConfirmDialog(title, desc, onConfirm) {
+export function showConfirmDialog(title, desc, onConfirm, options) {
+  options = options || {};
+  const confirmText = options.confirmText || '确认';
+  const cancelText = options.cancelText || '取消';
+  const onCancel = options.onCancel;
   const overlay = el('div', 'dialog-overlay');
   const dialog = el('div', 'dialog');
   dialog.appendChild(el('div', 'dialog-title', title));
   dialog.appendChild(el('div', 'dialog-desc', desc));
   const btnRow = el('div', 'dialog-btn-row');
-  const cancelBtn = el('button', 'dialog-cancel-btn', '取消');
-  cancelBtn.addEventListener('click', () => overlay.remove());
-  const confirmBtn = el('button', 'dialog-confirm-btn', '确认');
+  const cancelBtn = el('button', 'dialog-cancel-btn', cancelText);
+  cancelBtn.addEventListener('click', () => { overlay.remove(); if (onCancel) onCancel(); });
+  const confirmBtn = el('button', 'dialog-confirm-btn', confirmText);
   confirmBtn.addEventListener('click', () => { overlay.remove(); onConfirm(); });
   btnRow.appendChild(cancelBtn);
   btnRow.appendChild(confirmBtn);

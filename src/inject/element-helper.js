@@ -78,8 +78,14 @@
       overlay.style.display = 'none';
       tooltip.style.display = 'none';
 
-      // 生成元素 ID 并设置到 DOM 上
-      const elementId = '__rec_el_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+      // ★ 生成统一元素 ID：stepElementId（重复时追加序号 _2, _3...）
+      var baseId = 'stepElementId';
+      var elementId = baseId;
+      var counter = 1;
+      while (document.getElementById(elementId)) {
+        counter++;
+        elementId = baseId + '_' + counter;
+      }
       e.target.id = elementId;
 
       // 通过回调通知主进程（try/finally 确保即使回调异常也能退出选择模式）

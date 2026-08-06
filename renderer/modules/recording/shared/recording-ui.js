@@ -40,14 +40,21 @@ export function renderConfigPhase() {
   nameInput.id = 'sceneNameInput';
   configBox.appendChild(nameInput);
 
-  // ★ 场景码（自动生成，只读）
-  configBox.appendChild(labelEl('场景码（自动生成）', false));
+  // ★ 场景码（用户自定义，可编辑）
+  const codeLabelRow = el('div', 'label-row');
+  codeLabelRow.style.display = 'flex';
+  codeLabelRow.style.alignItems = 'center';
+  codeLabelRow.style.gap = '4px';
+  const codeLabel = labelEl('场景码', true);
+  codeLabelRow.appendChild(codeLabel);
+  const tooltipIcon = el('span', 'tooltip-icon', '?');
+  tooltipIcon.title = '该场景的编码，建议使用场景名称对应的英文单词';
+  codeLabelRow.appendChild(tooltipIcon);
+  configBox.appendChild(codeLabelRow);
   const sceneCodeInput = el('input', 'input-field');
   sceneCodeInput.type = 'text';
   sceneCodeInput.id = 'sceneCodeInput';
-  sceneCodeInput.placeholder = '输入场景名称后自动生成';
-  sceneCodeInput.readOnly = true;
-  sceneCodeInput.style.opacity = '0.7';
+  sceneCodeInput.placeholder = '请输入场景码（建议英文）';
   sceneCodeInput.style.fontFamily = "'Courier New', monospace";
   configBox.appendChild(sceneCodeInput);
 
@@ -57,32 +64,23 @@ export function renderConfigPhase() {
   startBtn.textContent = '开始录制';
   startBtn.id = 'startRecordingBtn';
   function updateStartBtn() {
-    startBtn.disabled = !titleInput.value.trim() || !nameInput.value.trim();
+    startBtn.disabled = !titleInput.value.trim() || !nameInput.value.trim() || !sceneCodeInput.value.trim();
   }
   titleInput.addEventListener('input', updateStartBtn);
-
-  // ★ 监听场景名称输入，自动生成场景码
-  nameInput.addEventListener('input', () => {
-    const name = nameInput.value.trim();
-    if (name) {
-      const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-      sceneCodeInput.value = name + '_' + random;
-    } else {
-      sceneCodeInput.value = '';
-    }
-    updateStartBtn();
-  });
+  nameInput.addEventListener('input', updateStartBtn);
+  sceneCodeInput.addEventListener('input', updateStartBtn);
 
   updateStartBtn();
   startBtn.addEventListener('click', () => {
     const title = titleInput.value.trim();
     const name = nameInput.value.trim();
-    if (!title || !name) return;
+    const code = sceneCodeInput.value.trim();
+    if (!title || !name || !code) return;
     sendAction('startRecording', {
       sceneTitle: title,
       sceneSubTitle: subtitleInput.value.trim(),
       sceneName: name,
-      sceneCode: sceneCodeInput.value.trim(), // ★ 传递场景码
+      sceneCode: code, // ★ 传递场景码
     });
   });
   contentEl.appendChild(startBtn);

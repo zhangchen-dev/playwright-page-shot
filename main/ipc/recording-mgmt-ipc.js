@@ -106,8 +106,9 @@ function registerRecordingMgmtIpc({ recorder, panelWindowGetter }) {
     try {
       const recordingsRoot = path.resolve(recorder.outputDir);
       const resolved = path.resolve(dirPath);
-      // 安全校验：必须在 recordings 目录内
-      if (!resolved.startsWith(recordingsRoot + path.sep)) {
+      // 安全校验：必须在 recordings 目录内（使用 path.relative 兼容 Windows 路径分隔符差异）
+      const relative = path.relative(recordingsRoot, resolved);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
         return { success: false, error: '非法路径' };
       }
       await fs.promises.rm(resolved, { recursive: true, force: true });
@@ -202,13 +203,87 @@ function registerRecordingMgmtIpc({ recorder, panelWindowGetter }) {
     }
   });
 
+  // ===== ★ 重录该步骤 — 加载已保存的场景并定位到目标步骤 =====
+  ipcMain.handle('rerecord-step', async (event, payload) => {
+    try {
+      const { dirName, fileName, fileIndex } = payload || {};
+      if (!dirName || !fileName) {
+        return { success: false, error: '缺少场景信息' };
+      }
+      const dirPath = path.join(recorder.outputDir, dirName);
+      const dataPath = path.join(dirPath, 'recording_data.json');
+      if (!fs.existsSync(dataPath)) {
+        return { success: false, error: '该场景不支持重录（缺少录制数据文件）' };
+      }
+      const data = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
+
+      // ★ 从 fileName 提取 stepId 并定位
+      const stepIdMatch = (fileName || '').match(/^(step\d+)\.html$/i);
+      if (!stepIdMatch) {
+        return { success: false, error: '无法从文件名解析步骤 ID: ' + fileName };
+      }
+      const stepId = stepIdMatch[1];
+      const positions = findStepPositions(data, stepId);
+      if (!positions) {
+        return { success: false, error: '未在录制数据中找到该步骤: ' + stepId };
+      }
+
+      const result = await recorder.handleAction('startReRecord', {
+        data,
+        dirPath,
+        mainModuleIndex: positions.mainModuleIndex,
+        subModuleIndex: positions.subModuleIndex,
+        stepIndex: positions.stepIndex,
+      });
+      if (!result.stateChanged) {
+        return { success: false, error: result.response?.message || '启动重录失败' };
+      }
+      return {
+        success: true,
+        info: result.response,
+        state: recorder.getState(),
+      };
+    } catch (err) {
+      console.error('[IPC] rerecord-step 失败:', err);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // ===== ★ 取消重录模式 =====
+  ipcMain.handle('cancel-rerecord', async (event) => {
+    try {
+      const result = await recorder.handleAction('cancelReRecord', {});
+      return { success: !!result.stateChanged, state: recorder.getState() };
+    } catch (err) {
+      console.error('[IPC] cancel-rerecord 失败:', err);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // ===== ★ 重载场景（重录模式下，放弃重录回到原始场景查看） =====
+  ipcMain.handle('reload-recording', async (event, dirPath) => {
+    try {
+      const dataPath = path.join(dirPath, 'recording_data.json');
+      if (!fs.existsSync(dataPath)) {
+        return { success: false, error: '该场景没有录制数据' };
+      }
+      const data = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
+      const result = await recorder.handleAction('continueRecording', { data });
+      return { success: !!result.stateChanged, state: recorder.getState() };
+    } catch (err) {
+      console.error('[IPC] reload-recording 失败:', err);
+      return { success: false, error: err.message };
+    }
+  });
+
   // ===== ★ 同步录制场景到生产环境 =====
   ipcMain.handle('sync-to-prd', async (event, dirPath) => {
     try {
       const recordingsRoot = path.resolve(recorder.outputDir);
       const resolved = path.resolve(dirPath);
-      // 安全校验
-      if (!resolved.startsWith(recordingsRoot + path.sep)) {
+      // 安全校验（使用 path.relative 兼容 Windows 路径分隔符差异）
+      const relative = path.relative(recordingsRoot, resolved);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
         return { success: false, error: '非法路径' };
       }
 
@@ -282,6 +357,25 @@ function registerRecordingMgmtIpc({ recorder, panelWindowGetter }) {
       return { success: false, error: err.message };
     }
   });
+}
+
+/** 在 mainModules 中查找指定 stepId 的位置 */
+function findStepPositions(data, stepId) {
+  if (!data || !data.mainModules) return null;
+  for (let mi = 0; mi < data.mainModules.length; mi++) {
+    const mainMod = data.mainModules[mi];
+    if (!mainMod || !Array.isArray(mainMod.subModules)) continue;
+    for (let si = 0; si < mainMod.subModules.length; si++) {
+      const subMod = mainMod.subModules[si];
+      if (!subMod || !Array.isArray(subMod.steps)) continue;
+      for (let idx = 0; idx < subMod.steps.length; idx++) {
+        if (subMod.steps[idx].stepId === stepId) {
+          return { mainModuleIndex: mi, subModuleIndex: si, stepIndex: idx };
+        }
+      }
+    }
+  }
+  return null;
 }
 
 module.exports = { registerRecordingMgmtIpc };

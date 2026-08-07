@@ -1,7 +1,7 @@
 /**
  * Electron 主进程 - 应用入口
  */
-const { app, BrowserWindow, screen, Tray, Menu, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, screen, Tray, Menu, nativeImage, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { BrowserManager } = require('../src/browser-manager');
@@ -207,6 +207,21 @@ app.whenReady().then(async () => {
 
   const { setupIpc } = require('./ipc');
   setupIpc({ recorder, browserManager, panelWindowGetter: () => panelWindow, credStore });
+
+  // ★ 打开外部 URL（mailto:/tel:/ftp: 等非 http 协议），由 webview new-window 调用
+  ipcMain.handle('open-external', async (event, url) => {
+    try {
+      if (typeof url !== 'string' || !url) {
+        return { success: false, error: '无效的 URL' };
+      }
+      const { shell } = require('electron');
+      await shell.openExternal(url);
+      return { success: true };
+    } catch (err) {
+      console.error('[main] open-external 失败:', err);
+      return { success: false, error: err.message };
+    }
+  });
 
   notifyPanel('stateSync', recorder.getState());
 

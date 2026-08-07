@@ -606,6 +606,38 @@ body.fullscreen-preview #rightContent {
   cursor: not-allowed;
 }
 
+/* ★ 预览步骤"重录该步骤"按钮 */
+.preview-rerecord-btn {
+  padding: 3px 10px;
+  font-size: 11px;
+  background: var(--accent-orange-bg);
+  color: var(--accent-orange-light);
+  border: 1px solid var(--border-warning);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1.4;
+  font-family: inherit;
+  font-weight: 600;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.preview-rerecord-btn:hover:not(:disabled) {
+  background: rgba(255, 147, 38, 0.18);
+  border-color: var(--accent-orange);
+  transform: translateY(-1px);
+}
+
+.preview-rerecord-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  border-color: var(--border-input);
+  font-weight: normal;
+}
+
 /* 折叠中间列的浮动按钮 */
 .expand-middle-btn {
   position: absolute;

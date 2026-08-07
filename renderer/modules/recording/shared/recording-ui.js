@@ -3,7 +3,8 @@
  */
 import { appState } from '../../common/state.js';
 import { api, sendAction } from '../../common/api.js';
-import { contentEl, el, labelEl, shortenUrl } from '../../common/dom.js';
+import { contentEl, el, labelEl, formField, shortenUrl, urlInput } from '../../common/dom.js';
+import { createSelectDropdown } from '../../common/select-dropdown.js';
 import { updateStatus, showToast, showConfirmDialog } from '../../common/feedback.js';
 import { captureWebviewData, removeWebviewElementId } from '../internal/webview-recording.js';
 import { doCompleteMark, handleEndAndSave, toggleSelectionMode } from './recording-actions.js';
@@ -16,62 +17,90 @@ export function renderConfigPhase() {
   contentEl.appendChild(el('div', 'section-title', '场景配置'));
   const configBox = el('div', 'section-box');
 
-  configBox.appendChild(labelEl('场景主标题', true));
-  const titleInput = el('input', 'input-field');
-  titleInput.type = 'text';
-  titleInput.placeholder = '请输入场景主标题';
-  titleInput.value = appState.state.sceneConfig.sceneTitle;
-  titleInput.id = 'sceneTitleInput';
-  configBox.appendChild(titleInput);
+  // ★ 场景主标题
+  const titleField = formField({
+    label: '场景主标题',
+    required: true,
+    placeholder: '例如：企业网银登录流程',
+    id: 'sceneTitleInput',
+    value: appState.state.sceneConfig.sceneTitle,
+  });
+  configBox.appendChild(titleField.wrapper);
 
-  configBox.appendChild(labelEl('场景副标题', false));
-  const subtitleInput = el('input', 'input-field');
-  subtitleInput.type = 'text';
-  subtitleInput.placeholder = '请输入场景副标题（选填）';
-  subtitleInput.value = appState.state.sceneConfig.sceneSubTitle;
-  subtitleInput.id = 'sceneSubTitleInput';
-  configBox.appendChild(subtitleInput);
+  // ★ 场景副标题
+  const subtitleField = formField({
+    label: '场景副标题',
+    placeholder: '选填，例如：支持指纹/人脸登录',
+    id: 'sceneSubTitleInput',
+    value: appState.state.sceneConfig.sceneSubTitle,
+  });
+  configBox.appendChild(subtitleField.wrapper);
 
-  configBox.appendChild(labelEl('场景名称', true));
-  const nameInput = el('input', 'input-field');
-  nameInput.type = 'text';
-  nameInput.placeholder = '请输入场景名称（英文/拼音）';
-  nameInput.value = appState.state.sceneConfig.sceneName;
-  nameInput.id = 'sceneNameInput';
-  configBox.appendChild(nameInput);
+  // ★ 场景名称（英文/拼音）
+  const nameField = formField({
+    label: '场景名称',
+    required: true,
+    placeholder: '例如：enterprise-login',
+    id: 'sceneNameInput',
+    value: appState.state.sceneConfig.sceneName,
+    hint: '用于生成目录名，建议使用英文或拼音',
+  });
+  configBox.appendChild(nameField.wrapper);
 
-  // ★ 场景码（用户自定义，可编辑）
-  const codeLabelRow = el('div', 'label-row');
-  codeLabelRow.style.display = 'flex';
-  codeLabelRow.style.alignItems = 'center';
-  codeLabelRow.style.gap = '4px';
-  const codeLabel = labelEl('场景码', true);
-  codeLabelRow.appendChild(codeLabel);
-  const tooltipIcon = el('span', 'tooltip-icon', '?');
-  tooltipIcon.title = '该场景的编码，建议使用场景名称对应的英文单词';
-  codeLabelRow.appendChild(tooltipIcon);
-  configBox.appendChild(codeLabelRow);
-  const sceneCodeInput = el('input', 'input-field');
-  sceneCodeInput.type = 'text';
-  sceneCodeInput.id = 'sceneCodeInput';
-  sceneCodeInput.placeholder = '请输入场景码（建议英文）';
-  sceneCodeInput.style.fontFamily = "'Courier New', monospace";
-  configBox.appendChild(sceneCodeInput);
+  // ★ 场景码（用户自定义）
+  const codeField = formField({
+    label: '场景码',
+    required: true,
+    placeholder: '例如：EL',
+    id: 'sceneCodeInput',
+    value: appState.state.sceneConfig.sceneCode,
+    hint: '建议使用场景名称对应的英文单词或缩写',
+    style: 'font-family: "Courier New", monospace; letter-spacing: 0.5px;',
+  });
+  configBox.appendChild(codeField.wrapper);
 
   contentEl.appendChild(configBox);
 
   const startBtn = el('button', 'btn btn-primary btn-full');
-  startBtn.textContent = '开始录制';
+  startBtn.textContent = '🎬  开始录制';
   startBtn.id = 'startRecordingBtn';
+
+  const titleInput = titleField.input;
+  const subtitleInput = subtitleField.input;
+  const nameInput = nameField.input;
+  const sceneCodeInput = codeField.input;
+
   function updateStartBtn() {
-    startBtn.disabled = !titleInput.value.trim() || !nameInput.value.trim() || !sceneCodeInput.value.trim();
+    // ★ 三个必填项都填了 + 浏览器已打开
+    const fieldsValid = !!(titleInput.value.trim() && nameInput.value.trim() && sceneCodeInput.value.trim());
+    startBtn.disabled = !fieldsValid || !appState.browserLaunched;
+    if (!appState.browserLaunched) {
+      startBtn.title = '请先在上方输入 URL 并打开浏览器';
+    } else {
+      startBtn.title = '';
+    }
   }
   titleInput.addEventListener('input', updateStartBtn);
   nameInput.addEventListener('input', updateStartBtn);
   sceneCodeInput.addEventListener('input', updateStartBtn);
 
+  // ★ 监听浏览器状态变化（打开/关闭）
+  const browserWatcher = () => updateStartBtn();
+  // 轮询浏览器状态（依赖 stateSync 中 browserLaunched 变化）
+  const intervalId = setInterval(browserWatcher, 500);
+  // 切换/卸载时清理
+  const cleanup = () => clearInterval(intervalId);
+  // 兜底：3 秒后停止轮询（用 mutation 监听更准确）
+  setTimeout(cleanup, 10000);
+
   updateStartBtn();
   startBtn.addEventListener('click', () => {
+    // ★ 二次拦截：未开浏览器禁止开始录制
+    if (!appState.browserLaunched) {
+      showToast('请先在顶部 URL 栏输入 URL 并打开浏览器，再开始录制', 'error', 4000);
+      urlInput.focus();
+      return;
+    }
     const title = titleInput.value.trim();
     const name = nameInput.value.trim();
     const code = sceneCodeInput.value.trim();
@@ -89,6 +118,46 @@ export function renderConfigPhase() {
 // ===== 渲染：录制阶段 =====
 export function renderRecordingPhase() {
   contentEl.innerHTML = '';
+
+  // ★ 重录模式横幅 — 顶部醒目标识
+  if (appState.state.reRecord && appState.state.reRecord.active) {
+    const reRecord = appState.state.reRecord;
+    const banner = el('div', 'rerecord-banner');
+    const bannerText = el('div', 'rerecord-banner-text');
+    const titleLine = el('div', 'rerecord-banner-title');
+    titleLine.textContent = '🔄 重录模式 — 正在重录第 ' + (reRecord.targetStepIndex + 1) + ' 步';
+    const subLine = el('div', 'rerecord-banner-sub');
+    const targetMod = reRecord.targetModuleTitle || '(未命名模块)';
+    const targetSub = reRecord.targetSubStepTitle || '(未命名主步骤)';
+    const targetStep = reRecord.targetStepTitle || '(未命名步骤)';
+    subLine.textContent = '模块: ' + targetMod + ' / 主步骤: ' + targetSub + ' / 步骤: ' + targetStep;
+    const newStepLine = el('div', 'rerecord-banner-count');
+    newStepLine.textContent = '已录制新步骤: ' + (reRecord.newStepCount || 0) + ' 步';
+    bannerText.appendChild(titleLine);
+    bannerText.appendChild(subLine);
+    bannerText.appendChild(newStepLine);
+    banner.appendChild(bannerText);
+
+    // 取消重录按钮
+    const cancelBtn = el('button', 'rerecord-banner-cancel-btn', '放弃重录');
+    cancelBtn.addEventListener('click', async () => {
+      cancelBtn.disabled = true;
+      try {
+        const result = await api.cancelRerecord();
+        if (result && result.success) {
+          showToast('已放弃重录，场景已恢复', 'info', 2500);
+        } else {
+          showToast('取消失败：' + (result?.error || '未知错误'), 'error');
+        }
+      } catch (err) {
+        showToast('取消失败：' + err.message, 'error');
+      } finally {
+        cancelBtn.disabled = false;
+      }
+    });
+    banner.appendChild(cancelBtn);
+    contentEl.appendChild(banner);
+  }
 
   const currentMainMod = appState.state.currentMainModuleIndex >= 0 && appState.state.currentMainModuleIndex < appState.state.mainModules.length
     ? appState.state.mainModules[appState.state.currentMainModuleIndex]
@@ -130,26 +199,29 @@ export function renderRecordingPhase() {
   contentEl.appendChild(el('div', 'section-title', '当前模块'));
   const mainModuleBox = el('div', 'section-box');
 
-  mainModuleBox.appendChild(labelEl('模块主标题', true));
-  const mainModNameInput = el('input', 'input-field');
-  mainModNameInput.type = 'text';
-  mainModNameInput.placeholder = '请输入模块主标题';
-  mainModNameInput.value = currentMainMod ? currentMainMod.mainModuleName : '';
-  mainModNameInput.id = 'mainModNameInput';
-  mainModuleBox.appendChild(mainModNameInput);
+  const mainModNameField = formField({
+    label: '模块主标题',
+    required: true,
+    placeholder: '例如：登录认证',
+    id: 'mainModNameInput',
+    value: currentMainMod ? currentMainMod.mainModuleName : '',
+  });
+  mainModuleBox.appendChild(mainModNameField.wrapper);
 
-  mainModuleBox.appendChild(labelEl('模块描述', false));
-  const mainModDescInput = el('input', 'input-field');
-  mainModDescInput.type = 'text';
-  mainModDescInput.placeholder = '请输入模块描述（选填）';
-  mainModDescInput.value = currentMainMod ? currentMainMod.mainModuleDesc : '';
-  mainModDescInput.id = 'mainModDescInput';
-  mainModuleBox.appendChild(mainModDescInput);
+  const mainModDescField = formField({
+    label: '模块描述',
+    placeholder: '选填，例如：用户输入账号密码并登录',
+    id: 'mainModDescInput',
+    value: currentMainMod ? currentMainMod.mainModuleDesc : '',
+  });
+  mainModuleBox.appendChild(mainModDescField.wrapper);
 
   // ★ 新增模块按钮放在模块区域内
   const addMainModuleBtn = el('button', 'btn btn-secondary btn-sm btn-full');
-  addMainModuleBtn.textContent = '+ 新增模块';
-  addMainModuleBtn.style.marginTop = '8px';
+  addMainModuleBtn.textContent = '＋  新增模块';
+  addMainModuleBtn.style.marginTop = '6px';
+  const mainModNameInput = mainModNameField.input;
+  const mainModDescInput = mainModDescField.input;
   addMainModuleBtn.addEventListener('click', async () => {
     const mainModName = mainModNameInput ? mainModNameInput.value.trim() : '';
     const mainModDesc = mainModDescInput ? mainModDescInput.value.trim() : '';
@@ -178,19 +250,20 @@ export function renderRecordingPhase() {
   contentEl.appendChild(el('div', 'section-title', '当前主步骤'));
   const subModuleBox = el('div', 'section-box');
 
-  subModuleBox.appendChild(labelEl('主步骤标题', true));
-  const modNameInput = el('input', 'input-field');
-  modNameInput.type = 'text';
-  modNameInput.placeholder = '请输入主步骤标题';
-  modNameInput.value = currentSubMod ? currentSubMod.mainStepTitle : '';
-  modNameInput.id = 'modNameInput';
-  subModuleBox.appendChild(modNameInput);
+  const modNameField = formField({
+    label: '主步骤标题',
+    required: true,
+    placeholder: '例如：输入账号密码',
+    id: 'modNameInput',
+    value: currentSubMod ? currentSubMod.mainStepTitle : '',
+  });
+  subModuleBox.appendChild(modNameField.wrapper);
 
   // ★ introduction 配置（可展开/收起）
   const introToggleRow = el('div', 'intro-toggle-row');
   const introToggleBtn = el('button', 'btn btn-link btn-sm');
   const hasIntro = currentSubMod && currentSubMod.introduction;
-  introToggleBtn.textContent = hasIntro ? '▼ 编辑介绍 (introduction)' : '▶ 添加介绍 (introduction)';
+  introToggleBtn.textContent = hasIntro ? '▼ 收起介绍' : '▶ 添加介绍 (introduction)';
   introToggleBtn.id = 'introToggleBtn';
   subModuleBox.appendChild(introToggleRow);
   introToggleRow.appendChild(introToggleBtn);
@@ -199,34 +272,38 @@ export function renderRecordingPhase() {
   introBox.id = 'introBox';
   introBox.style.display = hasIntro ? 'block' : 'none';
 
-  introBox.appendChild(labelEl('问题 (question)', false));
-  const introQuestionInput = el('input', 'input-field');
-  introQuestionInput.type = 'text';
-  introQuestionInput.placeholder = '请输入问题';
-  introQuestionInput.value = hasIntro ? (currentSubMod.introduction.question || '') : '';
-  introQuestionInput.id = 'introQuestionInput';
-  introBox.appendChild(introQuestionInput);
+  const introQuestionField = formField({
+    label: '问题 (question)',
+    placeholder: '例如：为什么需要登录？',
+    id: 'introQuestionInput',
+    value: hasIntro ? (currentSubMod.introduction.question || '') : '',
+  });
+  introBox.appendChild(introQuestionField.wrapper);
 
-  introBox.appendChild(labelEl('答案 (answer)', false));
-  const introAnswerInput = el('input', 'input-field');
-  introAnswerInput.type = 'text';
-  introAnswerInput.placeholder = '请输入答案';
-  introAnswerInput.value = hasIntro ? (currentSubMod.introduction.answer || '') : '';
-  introAnswerInput.id = 'introAnswerInput';
-  introBox.appendChild(introAnswerInput);
+  const introAnswerField = formField({
+    label: '答案 (answer)',
+    placeholder: '例如：登录后才能查看账户信息',
+    id: 'introAnswerInput',
+    value: hasIntro ? (currentSubMod.introduction.answer || '') : '',
+  });
+  introBox.appendChild(introAnswerField.wrapper);
 
   subModuleBox.appendChild(introBox);
+
+  const introQuestionInput = introQuestionField.input;
+  const introAnswerInput = introAnswerField.input;
 
   introToggleBtn.addEventListener('click', () => {
     const isVisible = introBox.style.display !== 'none';
     introBox.style.display = isVisible ? 'none' : 'block';
-    introToggleBtn.textContent = isVisible ? '▶ 添加介绍 (introduction)' : '▼ 编辑介绍 (introduction)';
+    introToggleBtn.textContent = isVisible ? '▶ 添加介绍 (introduction)' : '▼ 收起介绍';
   });
 
   // ★ 新增主步骤按钮放在主步骤区域内
   const addSubModuleBtn = el('button', 'btn btn-secondary btn-sm btn-full');
-  addSubModuleBtn.textContent = '+ 新增主步骤';
-  addSubModuleBtn.style.marginTop = '8px';
+  addSubModuleBtn.textContent = '＋  新增主步骤';
+  addSubModuleBtn.style.marginTop = '6px';
+  const modNameInput = modNameField.input;
   addSubModuleBtn.addEventListener('click', async () => {
     const modName = modNameInput ? modNameInput.value.trim() : '';
     const intro = collectIntroduction();
@@ -256,65 +333,76 @@ export function renderRecordingPhase() {
   // 选择模式提示
   const selectionHint = el('div', 'selection-active-hint');
   selectionHint.id = 'selectionHint';
-  selectionHint.textContent = '请在浏览器中点击要标记的元素 | Esc退出';
+  selectionHint.textContent = '🎯 请在浏览器中点击要标记的元素 | Esc退出';
   selectionHint.style.display = appState.isSelectingMode ? '' : 'none';
   markBox.appendChild(selectionHint);
 
-  const shortcutHint = el('div', 'shortcut-hint');
-  shortcutHint.textContent = '快捷键: Alt+A 选择元素';
-  markBox.appendChild(shortcutHint);
+  // 标记操作行：选择按钮 + 主标题输入 + 标记按钮
+  const markRow = el('div', 'mark-action-row');
+  markRow.id = 'markActionRow';
 
-  // 标记操作行
-  const markRow = el('div', 'btn-row');
-
-  const markBtn = el('button', 'btn btn-secondary btn-sm');
-  markBtn.textContent = appState.isSelectingMode ? '取消选择' : '选择元素';
-  markBtn.className = appState.isSelectingMode ? 'btn btn-danger btn-sm' : 'btn btn-secondary btn-sm';
+  const markBtn = el('button', appState.isSelectingMode ? 'btn btn-danger btn-sm' : 'btn btn-primary btn-sm');
+  markBtn.textContent = appState.isSelectingMode ? '✕ 取消选择' : '⊕ 选择元素';
   markBtn.id = 'markBtn';
   markBtn.addEventListener('click', () => toggleSelectionMode());
   markRow.appendChild(markBtn);
 
-  const mainTitleInput = el('input', 'input-field');
-  mainTitleInput.type = 'text';
-  mainTitleInput.placeholder = '主标题 (mainTitle)';
-  mainTitleInput.style.marginBottom = '0';
-  mainTitleInput.style.flex = '1';
-  mainTitleInput.id = 'markMainTitleInput';
-  if (appState.selectedElementData) mainTitleInput.value = appState.selectedElementData.text || '';
-  markRow.appendChild(mainTitleInput);
+  const mainTitleField = formField({
+    label: '',
+    placeholder: '主标题 (mainTitle)',
+    id: 'markMainTitleInput',
+    value: appState.selectedElementData ? (appState.selectedElementData.text || '') : '',
+    style: 'margin-bottom: 0; flex: 1;',
+  });
+  mainTitleField.wrapper.style.flex = '1';
+  mainTitleField.wrapper.style.marginBottom = '0';
+  markRow.appendChild(mainTitleField.wrapper);
 
-  const completeMarkBtn = el('button', 'btn btn-primary btn-sm');
-  completeMarkBtn.textContent = '标记';
+  const completeMarkBtn = el('button', 'btn btn-success btn-sm');
+  completeMarkBtn.textContent = '✓ 标记';
   completeMarkBtn.id = 'completeMarkBtn';
   completeMarkBtn.disabled = !appState.hasSelectedElement;
-  completeMarkBtn.className = appState.hasSelectedElement ? 'btn btn-primary btn-sm' : 'btn btn-primary btn-sm btn-disabled';
   completeMarkBtn.addEventListener('click', () => doCompleteMark());
   markRow.appendChild(completeMarkBtn);
 
   markBox.appendChild(markRow);
 
+  const mainTitleInput = mainTitleField.input;
+
   // 副标题
-  markBox.appendChild(labelEl('副标题 (title)', false));
-  const subTitleInput = el('input', 'input-field');
-  subTitleInput.type = 'text';
-  subTitleInput.placeholder = '请输入副标题（选填）';
-  subTitleInput.id = 'markSubTitleInput';
-  markBox.appendChild(subTitleInput);
-
-  // ★ position 下拉选择
-  markBox.appendChild(labelEl('位置 (position)', false));
-  const positionSelect = el('select', 'input-field');
-  positionSelect.id = 'markPositionSelect';
-  ['right', 'bottom', 'left', 'top'].forEach((pos) => {
-    const opt = el('option', null, pos);
-    opt.value = pos;
-    positionSelect.appendChild(opt);
+  const subTitleField = formField({
+    label: '副标题 (title)',
+    placeholder: '选填，例如：点击登录按钮',
+    id: 'markSubTitleInput',
   });
-  markBox.appendChild(positionSelect);
+  markBox.appendChild(subTitleField.wrapper);
 
-  // ★ showNextStep 开关
-  const showNextRow = el('div', 'toggle-row');
-  const showNextLabel = el('span', 'toggle-label', '显示下一步按钮 (showNextStep)');
+  // ★ position 下拉选择 — 与下一步按钮开关并排
+  const positionRow = el('div', 'form-field-row');
+
+  // ★ 自定义下拉（antd 风格），id 兼容原 markPositionSelect
+  const positionWrapper = el('div', 'form-field');
+  const positionLabel = el('label', 'field-label', '位置 (position)');
+  positionWrapper.appendChild(positionLabel);
+  const positionSelectDropdown = createSelectDropdown({
+    id: 'markPositionSelect',
+    options: [
+      { value: 'right',  label: 'right',  icon: '➡️' },
+      { value: 'bottom', label: 'bottom', icon: '⬇️' },
+      { value: 'left',   label: 'left',   icon: '⬅️' },
+      { value: 'top',    label: 'top',    icon: '⬆️' },
+    ],
+    value: 'right',
+  });
+  positionWrapper.appendChild(positionSelectDropdown.wrapper);
+  positionRow.appendChild(positionWrapper);
+
+  // ★ showNextStep 开关 — 纯开关，不带 input 框
+  const showNextWrapper = el('div', 'form-field');
+  const showNextLabel = el('label', 'field-label', '下一步按钮 (showNextStep)');
+  showNextWrapper.appendChild(showNextLabel);
+  const showNextControl = el('div', 'switch-control');
+  const showNextText = el('span', 'switch-text', '显示');
   const showNextToggle = el('label', 'switch');
   const showNextCheckbox = el('input');
   showNextCheckbox.type = 'checkbox';
@@ -323,9 +411,17 @@ export function renderRecordingPhase() {
   const showNextSlider = el('span', 'slider');
   showNextToggle.appendChild(showNextCheckbox);
   showNextToggle.appendChild(showNextSlider);
-  showNextRow.appendChild(showNextLabel);
-  showNextRow.appendChild(showNextToggle);
-  markBox.appendChild(showNextRow);
+  showNextControl.appendChild(showNextText);
+  showNextControl.appendChild(showNextToggle);
+  showNextWrapper.appendChild(showNextControl);
+  positionRow.appendChild(showNextWrapper);
+
+  markBox.appendChild(positionRow);
+
+  // ★ 监听 showNextStep 开关，更新文字
+  showNextCheckbox.addEventListener('change', () => {
+    showNextText.textContent = showNextCheckbox.checked ? '显示' : '隐藏';
+  });
 
   // 标记列表
   const markListEl = el('div', 'mark-list');

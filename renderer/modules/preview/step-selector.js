@@ -1,11 +1,12 @@
 /**
- * 预览步骤选择器（上一步/下一步 + 下拉框）
+ * 预览步骤选择器（上一步/下一步 + 下拉框 + 重录该步骤）
  */
 import { appState } from '../common/state.js';
 import { el } from '../common/dom.js';
 import { filePathToUrl } from './preview.js';
+import { startReRecord } from '../recording/rerecord/rerecord-flow.js';
 
-/** 渲染预览步骤选择器（含上一步/下一步按钮） */
+/** 渲染预览步骤选择器（含上一步/下一步按钮 + 重录按钮） */
 export function renderPreviewStepSelector() {
   // 移除旧的选择器
   const oldSelector = document.querySelector('.preview-step-selector');
@@ -51,6 +52,8 @@ export function renderPreviewStepSelector() {
     prevBtn.disabled = (idx <= 0);
     nextBtn.disabled = (idx >= appState.currentPreviewFiles.length - 1);
     select.selectedIndex = idx;
+    // ★ 同步重录按钮的 enabled 状态
+    if (rerecordBtn) updateRerecordBtnState();
   }
 
   select.addEventListener('change', () => {
@@ -60,9 +63,35 @@ export function renderPreviewStepSelector() {
   prevBtn.addEventListener('click', () => navigateToStep(appState.currentPreviewStepIndex - 1));
   nextBtn.addEventListener('click', () => navigateToStep(appState.currentPreviewStepIndex + 1));
 
+  // ★ 重录该步骤按钮（需要 recording_data.json 才可点击）
+  const rerecordBtn = el('button', 'preview-rerecord-btn', '🔄 重录该步骤');
+  rerecordBtn.title = '将该步骤的录制内容重新录制（加载场景数据）';
+
+  function updateRerecordBtnState() {
+    if (!rerecordBtn) return;
+    const hasRecordingData = appState.currentPreviewDirName &&
+      appState.currentPreviewFiles &&
+      appState.currentPreviewFiles.length > 0 &&
+      appState.currentPreviewFiles[appState.currentPreviewStepIndex];
+    rerecordBtn.disabled = !hasRecordingData;
+  }
+  updateRerecordBtnState();
+
+  rerecordBtn.addEventListener('click', () => {
+    const file = appState.currentPreviewFiles[appState.currentPreviewStepIndex];
+    if (!file) return;
+    // 调用重录流程
+    startReRecord({
+      dirName: appState.currentPreviewDirName,
+      filePath: file.filePath,
+      fileIndex: appState.currentPreviewStepIndex,
+    });
+  });
+
   selector.appendChild(prevBtn);
   selector.appendChild(select);
   selector.appendChild(nextBtn);
+  selector.appendChild(rerecordBtn);
 
   // 插入到 right-toolbar 之后
   const toolbar = rightCol.querySelector('.right-toolbar');
@@ -96,7 +125,7 @@ export function syncPreviewStepSelector() {
     if (select) select.selectedIndex = idx;
     // 更新按钮状态
     const prevBtn = document.querySelector('.preview-step-selector button:first-child');
-    const nextBtn = document.querySelector('.preview-step-selector button:last-child');
+    const nextBtn = document.querySelector('.preview-step-selector button:nth-child(3)');
     if (prevBtn) prevBtn.disabled = (idx <= 0);
     if (nextBtn) nextBtn.disabled = (idx >= appState.currentPreviewFiles.length - 1);
   }

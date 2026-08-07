@@ -65,6 +65,9 @@ export const appState = {
   currentPreviewDirName: null,  // ★ 当前正在预览的场景目录名（用于高亮）
   currentPreviewStepIndex: 0,   // ★ 当前预览步骤索引
   currentResolution: '1920',    // 默认桌面 1920×1080
+
+  // ★ 继续录制模式标志（管理视图点击"继续录制"后设置，用于跳过视图切换确认对话框）
+  _continueRecordingMode: false,
 };
 
 // ===== 常量 =====

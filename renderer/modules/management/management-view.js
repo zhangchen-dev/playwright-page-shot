@@ -6,9 +6,17 @@ import { api } from '../common/api.js';
 import { el } from '../common/dom.js';
 import { showToast, showConfirmDialog } from '../common/feedback.js';
 import { openPreview, toggleFullscreenPreview } from '../preview/preview.js';
+import { requestSwitchView } from '../common/layout.js';
 
 // ===== ★ 管理模式：场景列表 =====
 export async function renderManagementView() {
+  // ★ 防御：清理所有残留 dialog overlay（防止跨视图切换时残留的 dialog 阻挡 UI）
+  document.querySelectorAll('.dialog-overlay').forEach((o) => o.remove());
+
+  // ★ 早期守卫：如果视图已切换（例如重录流程中状态同步触发了自动切换到 recording 视图），
+  //    立即返回，不清空 content，避免覆盖录制视图的表单。
+  if (appState.currentView !== 'management') return;
+
   const c = document.getElementById('content');
   if (!c) return;
   c.innerHTML = '';
@@ -16,6 +24,11 @@ export async function renderManagementView() {
   c.appendChild(el('div', 'empty-state', '加载中...'));
 
   const result = await api.getRecordedExports();
+
+  // ★ 检查视图是否已切换（例如重录流程中状态同步后用户已切到录制视图）
+  //    如果已不在管理视图，放弃渲染防止覆盖录制UI
+  if (appState.currentView !== 'management') return;
+
   c.innerHTML = '';
 
   if (!result || !result.success) {
@@ -86,9 +99,10 @@ export function buildScenarioCard(exp) {
       continueBtn.textContent = '▶ 继续录制';
       if (result && result.success) {
         showToast('已加载场景数据，可继续录制', 'success');
-        // ★ 模拟点击"页面录制"菜单项切换视图（避免循环依赖）
-        const recordingMenuItem = document.querySelector('.menu-item[data-view="recording"]');
-        if (recordingMenuItem) recordingMenuItem.click();
+        // ★ 设置继续录制模式标志（跳过视图切换时的"录制未完成"确认对话框）
+        appState._continueRecordingMode = true;
+        // ★ 切换到录制视图
+        requestSwitchView('recording');
       } else {
         showToast('继续录制失败：' + (result?.error || '未知错误'), 'error', 5000);
       }

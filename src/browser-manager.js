@@ -535,6 +535,8 @@ class BrowserManager {
       this._pageIdMap.clear();
       this._activePageId = null;
       this._exposeFunctionsRegistered = false; // ★ 重置以便下次启动重新注册
+      // ★ 确保通知面板浏览器已关闭（即使 context.close() 的 close 事件未触发）
+      if (this.onBrowserClosed) this.onBrowserClosed();
     }
   }
 

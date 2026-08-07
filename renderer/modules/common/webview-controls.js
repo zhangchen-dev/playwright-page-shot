@@ -251,5 +251,43 @@ export function initBrowserModeControls() {
         loading.classList.add('active');
       }
     });
+
+    // ★ new-window — 处理 window.open / target="_blank"
+    //    必须配合 webview 标签的 webpreferences="allowpopups" 才会触发此事件。
+    //    否则 Electron 会静默阻止弹窗，新标签页无响应。
+    webview.addEventListener('new-window', (event) => {
+      // 阻止默认行为（默认会尝试在 Electron 中打开新窗口，我们接管）
+      event.preventDefault();
+
+      const newUrl = event.url;
+      if (!newUrl) return;
+
+      // 非 http(s) 协议：用系统默认应用打开（mailto:/tel:/ftp: 等）
+      if (!/^https?:\/\//i.test(newUrl)) {
+        if (window.electronAPI && window.electronAPI.openExternal) {
+          window.electronAPI.openExternal(newUrl).then((result) => {
+            if (!result || !result.success) {
+              showToast('无法打开链接: ' + (result?.error || newUrl), 'error');
+            }
+          }).catch((err) => {
+            showToast('打开链接失败: ' + err.message, 'error');
+          });
+        } else {
+          showToast('当前环境不支持打开外部链接: ' + newUrl, 'warning');
+        }
+        return;
+      }
+
+      // http(s) 协议：在当前 webview 中导航
+      //    did-start-loading → did-finish-load 事件会自动触发，element-helper
+      //    和 credential-helper 脚本会重新注入，录制/选择能力在导航后保持可用。
+      try {
+        webview.loadURL(newUrl);
+        console.log('[panel] new-window 已在当前 webview 中导航: ' + newUrl);
+      } catch (err) {
+        console.error('[panel] 导航新窗口 URL 失败:', err);
+        showToast('导航失败: ' + err.message, 'error');
+      }
+    });
   }
 }

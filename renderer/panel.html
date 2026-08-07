@@ -23,7 +23,11 @@
       </div>
       <div class="menu-item" data-view="management">
         <span class="menu-icon">🗂️</span>
-        <span class="menu-text">后台管理</span>
+        <span class="menu-text">场景管理</span>
+      </div>
+      <div class="menu-item" data-view="demo">
+        <span class="menu-icon">🎨</span>
+        <span class="menu-text">定制演示</span>
       </div>
       <div class="sidebar-spacer"></div>
       <div class="menu-item" data-view="settings">
@@ -94,7 +98,7 @@
         <!-- ★ 滚动容器：webview 以标准尺寸渲染，溢出滚动 -->
         <div class="webview-scroll-wrapper" id="webviewScrollWrapper">
           <div class="webview-scale-wrapper" id="webviewScaleWrapper">
-            <webview id="previewWebview" class="preview-webview-inner" partition="persist:webview"></webview>
+            <webview id="previewWebview" class="preview-webview-inner" partition="persist:webview" webpreferences="allowpopups"></webview>
           </div>
         </div>
       </div>

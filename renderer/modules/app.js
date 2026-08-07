@@ -18,6 +18,10 @@ import { renderManagementView } from './management/management-view.js';
 
 // ===== 事件监听 =====
 api.onStateSync((newState) => {
+  // ★ 当录制状态变为 config（已保存/已清空）时，清除继续录制模式标志
+  if (newState.phase === 'config' && appState._continueRecordingMode) {
+    appState._continueRecordingMode = false;
+  }
   const wasProcessing = appState.isProcessing;
   appState.state = newState;
   if (urlInput && !urlInput.matches(':focus')) {
@@ -27,6 +31,28 @@ api.onStateSync((newState) => {
     appState.isProcessing = false;
     hideLoadingOverlay();
   }
+
+  // ★ 继续录制/重录流程：stateSync 携带的 phase 已经是 'recording'，但 currentView 仍可能是 'management'/'settings'/'demo'。
+  //    此时应自动同步切换到录制视图，避免与 renderManagementView 竞态覆盖录制表单。
+  if (appState._continueRecordingMode && newState.phase === 'recording' && appState.currentView !== 'recording') {
+    appState.currentView = 'recording';
+    // 同步菜单高亮
+    document.querySelectorAll('.menu-item').forEach((item) => {
+      item.classList.toggle('active', item.dataset.view === 'recording');
+    });
+    // URL 栏/浏览器模式行显隐
+    const urlBar = document.getElementById('urlBar');
+    if (urlBar) urlBar.style.display = '';
+    const browserModeRow = document.getElementById('browserModeRow');
+    if (browserModeRow) browserModeRow.style.display = '';
+    // 中间列标题
+    const middleTitle = document.getElementById('middleTitle');
+    if (middleTitle) middleTitle.textContent = '页面录制';
+    // 触发录制表单渲染
+    rerenderPanel();
+    return;
+  }
+
   // ★ 管理视图下不重渲染录制面板（除非有场景卡片需要刷新）
   if (appState.currentView !== 'recording') {
     if (document.querySelector('.scenario-card')) renderManagementView();
@@ -165,6 +191,9 @@ document.addEventListener('keydown', (e) => {
 // ===== 初始化 =====
 initLayoutEvents();
 initBrowserModeControls();
+
+// ★ 调试用：将 appState 暴露到 window（CDP 验证脚本需要访问）
+window.appState = appState;
 
 // ===== 初始渲染 =====
 rerenderPanel();

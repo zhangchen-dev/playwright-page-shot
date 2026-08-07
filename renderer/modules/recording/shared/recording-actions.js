@@ -7,6 +7,7 @@ import { updateStatus, showToast, showEnvConfigDialog, showConfirmDialog } from 
 import { captureWebviewData, enableWebviewSelectionMode, disableWebviewSelectionMode } from '../internal/webview-recording.js';
 import { enableExternalSelection, disableExternalSelection } from '../external/external-recording.js';
 import { collectIntroduction } from './recording-ui.js';
+import { confirmAndSaveReRecord } from '../rerecord/rerecord-flow.js';
 
 // ===== 完成标记 =====
 export function doCompleteMark() {
@@ -60,8 +61,40 @@ export async function handleEndAndSave() {
 
   // ★ 不再选择保存目录 — recorder.outputDir 已指向应用 userData/recordings
 
+  // ★ 重录模式：在保存前弹出"覆盖/插入"选择对话框
+  const inReRecord = !!(appState.state.reRecord && appState.state.reRecord.active);
+  if (inReRecord) {
+    const decision = await confirmAndSaveReRecord();
+    if (!decision.proceed) {
+      // 用户取消
+      showToast('已取消保存', 'info', 2000);
+      return;
+    }
+    // 将 saveMode 暂存到 appState，sendAction 不会用到（后端用 msg.reRecordSaveMode）
+    appState._reRecordSaveMode = decision.saveMode;
+  }
+
   // ★ 使用环境配置对话框
-  const envConfig = await showEnvConfigDialog(appState.state.sceneCode || appState.state.sceneConfig.sceneName);
+  //   - defaultSceneCode 优先使用 state.sceneCode（来自继续录制）
+  //   - 兜底使用 sceneName（来自继续录制的 sceneConfig）
+  //   - 再兜底使用当前时间戳生成的临时场景码（避免空字符串卡死）
+  const fallbackCode = appState.state.sceneCode
+    || (appState.state.sceneConfig && appState.state.sceneConfig.sceneName)
+    || ('REC_' + Date.now().toString(36).toUpperCase().slice(-6));
+  const envConfig = await showEnvConfigDialog(fallbackCode);
+
+  // ★ 关键修复：用户取消（按 Esc / 点取消按钮 / 点遮罩）→ 直接退出保存流程
+  //   防止 await showEnvConfigDialog 解析为 null 后下面的 sendAction 误用空字段
+  if (!envConfig) {
+    showToast('已取消保存', 'info', 2000);
+    updateStatus('', '');
+    return;
+  }
+
+  // ★ P0 防御：未打开浏览器时给出明确提示，避免后续 captureWebviewData 挂起
+  if (!appState.browserLaunched) {
+    showToast('提示：浏览器未打开，将使用已加载数据保存', 'info', 3000);
+  }
 
   const modNameInput = document.getElementById('modNameInput');
   const mainModNameInput = document.getElementById('mainModNameInput');
@@ -71,8 +104,9 @@ export async function handleEndAndSave() {
   updateStatus('正在处理和保存...', 'var(--accent-blue)');
 
   // ★ 应用内浏览器模式：先捕获 webview 页面数据
+  //    增加 browserLaunched 守卫：未启动浏览器时跳过，避免在 about:blank 上 executeJavaScript 挂起
   let webviewData = null;
-  if (appState.browserMode === 'in-app') {
+  if (appState.browserLaunched && appState.browserMode === 'in-app') {
     try {
       webviewData = await captureWebviewData();
     } catch (err) {
@@ -93,7 +127,11 @@ export async function handleEndAndSave() {
     pageId: appState.browserMode === 'in-app' ? 'webview' : undefined,
     ...(webviewData || {}),
     isWebviewMode: appState.browserMode === 'in-app',
+    // ★ 重录模式：传递保存模式（'replace' / 'insert' / 'replace-single'）
+    reRecordSaveMode: inReRecord ? (appState._reRecordSaveMode || 'replace') : undefined,
   });
+  // 清理临时状态
+  appState._reRecordSaveMode = null;
 
   if (result && result.type === 'error') {
     showToast('保存失败：' + (result.message || ''), 'error', 5000);

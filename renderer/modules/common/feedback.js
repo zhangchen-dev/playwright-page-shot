@@ -45,7 +45,50 @@ export function showConfirmDialog(title, desc, onConfirm, options) {
   btnRow.appendChild(confirmBtn);
   dialog.appendChild(btnRow);
   overlay.appendChild(dialog);
+  // ★ 防御：防止叠加 — 先清理已有的 dialog overlay
+  document.querySelectorAll('.dialog-overlay').forEach((o) => o.remove());
   document.body.appendChild(overlay);
+}
+
+/** ★ 多按钮对话框 — 支持自定义按钮列表（用于重录"覆盖/插入"选项） */
+export function showDialog({ title, desc, buttons, width }) {
+  const overlay = el('div', 'dialog-overlay');
+  const dialog = el('div', 'dialog');
+  if (width) dialog.style.width = width;
+  dialog.appendChild(el('div', 'dialog-title', title));
+  if (desc) {
+    // 支持 \n 换行
+    const descEl = el('div', 'dialog-desc');
+    if (typeof desc === 'string') {
+      descEl.style.whiteSpace = 'pre-wrap';
+      descEl.textContent = desc;
+    } else {
+      descEl.appendChild(desc);
+    }
+    dialog.appendChild(descEl);
+  }
+
+  const btnRow = el('div', 'dialog-btn-row');
+  // ★ 多个按钮时使用列布局（垂直排列）
+  if (buttons.length > 2) {
+    btnRow.style.flexDirection = 'column';
+    btnRow.style.gap = '8px';
+  }
+  buttons.forEach((btn) => {
+    const b = el('button', btn.className || 'dialog-confirm-btn', btn.text);
+    b.addEventListener('click', () => {
+      overlay.remove();
+      if (btn.onClick) btn.onClick();
+    });
+    if (btn.style) b.style.cssText = btn.style;
+    btnRow.appendChild(b);
+  });
+  dialog.appendChild(btnRow);
+  overlay.appendChild(dialog);
+  // ★ 防御：防止叠加 — 先清理已有的 dialog overlay
+  document.querySelectorAll('.dialog-overlay').forEach((o) => o.remove());
+  document.body.appendChild(overlay);
+  return overlay;
 }
 
 /** ★ 环境配置对话框（仅 dev/prd，本地预览为默认功能无需选择） */
@@ -124,6 +167,46 @@ export function showEnvConfigDialog(defaultSceneCode) {
 
     // 按钮
     const btnRow = el('div', 'dialog-btn-row');
+
+    // ★ 关键修复：统一的关闭/取消函数（多次调用安全）
+    //   - 防止 overlay 被外部强制移除后 Promise 永久挂起
+    //   - 标记已关闭后忽略重复调用
+    let _closed = false;
+    function closeWith(reason, payload) {
+      if (_closed) return;
+      _closed = true;
+      if (overlay && overlay.parentNode) overlay.remove();
+      // 清理 Esc 监听
+      document.removeEventListener('keydown', onKeyDown);
+      // 标记 dialog 已关闭（供外部参考）
+      overlay.dataset.closed = '1';
+      resolve(payload);
+    }
+
+    // ★ 关键修复：Esc 键关闭对话框
+    function onKeyDown(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        closeWith('cancel', null);
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+
+    // ★ 关键修复：点击遮罩（非 dialog 内容区）关闭对话框
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        closeWith('overlay-click', null);
+      }
+    });
+
+    // ★ 关键修复：增加"取消"按钮，避免用户被卡死
+    const cancelBtn = el('button', 'dialog-cancel-btn', '取消');
+    cancelBtn.addEventListener('click', () => {
+      closeWith('cancel-btn', null);
+    });
+    btnRow.appendChild(cancelBtn);
+
     const confirmBtn = el('button', 'dialog-confirm-btn blue', '确认');
     confirmBtn.addEventListener('click', () => {
       const sceneCode = sceneCodeInput.value.trim();
@@ -132,8 +215,7 @@ export function showEnvConfigDialog(defaultSceneCode) {
         sceneCodeInput.focus();
         return;
       }
-      overlay.remove();
-      resolve({
+      closeWith('confirm', {
         environment: selectedEnv,
         sceneCode: sceneCode,
         envBaseUrl: ENV_URLS[selectedEnv],
@@ -143,6 +225,8 @@ export function showEnvConfigDialog(defaultSceneCode) {
     dialog.appendChild(btnRow);
 
     overlay.appendChild(dialog);
+    // ★ 防御：防止叠加 — 先清理已有的 dialog overlay
+    document.querySelectorAll('.dialog-overlay').forEach((o) => o.remove());
     document.body.appendChild(overlay);
     setTimeout(() => sceneCodeInput.focus(), 50);
   });

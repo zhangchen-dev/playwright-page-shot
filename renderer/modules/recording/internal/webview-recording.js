@@ -238,8 +238,27 @@ export async function captureWebviewData() {
   const webview = document.getElementById('previewWebview');
   if (!webview) return null;
 
+  // ★ P0 防御：浏览器未启动时直接返回，避免在未初始化的 webview 上 executeJavaScript 永久挂起
+  if (!appState.browserLaunched) {
+    console.log('[panel] 浏览器未启动，跳过 webview 数据捕获');
+    return null;
+  }
+
   // 1. 获取 URL
   const url = webview.getURL();
+  // ★ 防御：webview 未加载真实页面时直接返回（about:blank 上 executeJavaScript 也可能挂起）
+  if (!url || url === 'about:blank' || url.startsWith('chrome-error')) {
+    console.log('[panel] webview 未加载有效页面（' + url + '），跳过数据捕获');
+    return null;
+  }
+
+  // ★ 超时保护：防止 executeJavaScript 永久挂起（如 webview 内部异常）
+  const withTimeout = (promise, ms, label) => Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(label + ' 超时 (' + ms + 'ms)')), ms)
+    ),
+  ]);
 
   // 2. 获取清理后的 HTML（移除 script、事件处理器等）
   const cleanupCode = [
@@ -257,8 +276,6 @@ export async function captureWebviewData() {
     '  return "<!DOCTYPE html>\\n" + clone.outerHTML;',
     '})()',
   ].join('\n');
-
-  const html = await webview.executeJavaScript(cleanupCode);
 
   // 3. 获取 CSS 内容（通过 fetch 获取外部样式表）
   const cssFetchCode = [
@@ -278,9 +295,14 @@ export async function captureWebviewData() {
     '})()',
   ].join('\n');
 
-  const cssJson = await webview.executeJavaScript(cssFetchCode);
-  let cssContents = [];
-  try { cssContents = JSON.parse(cssJson); } catch (e) {}
-
-  return { url, html, cssContents };
+  try {
+    const html = await withTimeout(webview.executeJavaScript(cleanupCode), 3000, 'HTML 捕获');
+    const cssJson = await withTimeout(webview.executeJavaScript(cssFetchCode), 3000, 'CSS 捕获');
+    let cssContents = [];
+    try { cssContents = JSON.parse(cssJson); } catch (e) {}
+    return { url, html, cssContents };
+  } catch (err) {
+    console.warn('[panel] 捕获 webview 数据失败:', err.message);
+    return null;
+  }
 }

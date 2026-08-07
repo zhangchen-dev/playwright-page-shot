@@ -3,9 +3,65 @@
  * 从原 panel.css 拆分
  */
 
-/* ===== 标记列表 ===== */
+/* ★ 标记列表 ===== */
 
 .mark-list { margin-top: 8px; }
+
+/* ★ 标记操作行（选择按钮 + 主标题 + 标记按钮） */
+.mark-action-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.mark-action-row > button {
+  flex-shrink: 0;
+  height: 38px;
+  align-self: flex-end;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+/* ★ Form Field 并排列（两个 field 横向排列） */
+.form-field-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  margin-bottom: 12px;
+}
+
+.form-field-row > .form-field {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.form-field-row .toggle-row {
+  margin-top: 0;
+}
+
+/* ★ 开关控制行：文字 + 开关（无 input 框） */
+.switch-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 4px;
+}
+
+.switch-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  min-width: 28px;
+  user-select: none;
+  transition: color 0.15s;
+}
+
+.switch-control:has(input:checked) .switch-text {
+  color: var(--accent-blue);
+  font-weight: 600;
+}
 
 .mark-item {
   display: flex;
@@ -136,16 +192,32 @@
 /* ===== 快捷键提示 ===== */
 
 .shortcut-hint {
-  display: block;
-  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
   color: var(--text-secondary);
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  padding: 4px 10px;
+  background: var(--accent-blue-bg);
+  border: 1px solid rgba(25, 102, 255, 0.2);
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.shortcut-hint::before {
+  content: '⌨';
+  font-size: 11px;
 }
 
 .step-info {
   font-size: 11px;
   color: var(--text-secondary);
   margin-bottom: 10px;
+  padding: 6px 10px;
+  background: var(--bg-section);
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
 }
 
 /* ===== 页面信息 ===== */
@@ -311,10 +383,24 @@
 
 .intro-box {
   margin-top: 6px;
-  padding: 8px;
-  background: var(--bg-section);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  padding: 12px;
+  background: linear-gradient(135deg, #f0f7ff 0%, #ebf3ff 100%);
+  border: 1px dashed rgba(25, 102, 255, 0.35);
+  border-radius: 8px;
+  position: relative;
+}
+
+.intro-box::before {
+  content: '💡 介绍配置（可选）';
+  position: absolute;
+  top: -8px;
+  left: 12px;
+  padding: 0 8px;
+  background: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-blue-light);
+  border-radius: 4px;
 }
 
 /* ===== Intro Badge ===== */
@@ -407,5 +493,77 @@
 
 .quick-login-fill-btn:disabled {
   opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ===== ★ 重录模式横幅 ===== */
+
+.rerecord-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #fff8eb 0%, #ffefd3 100%);
+  border: 1px solid var(--border-warning);
+  border-left: 4px solid var(--accent-orange);
+  border-radius: var(--radius-md);
+  margin-bottom: 14px;
+  box-shadow: 0 2px 6px rgba(255, 147, 38, 0.08);
+  animation: rerecord-banner-in 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@keyframes rerecord-banner-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.rerecord-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.rerecord-banner-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-orange);
+  margin-bottom: 4px;
+}
+
+.rerecord-banner-sub {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  word-break: break-all;
+  margin-bottom: 2px;
+}
+
+.rerecord-banner-count {
+  font-size: 11px;
+  color: var(--accent-orange);
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.rerecord-banner-cancel-btn {
+  padding: 6px 12px;
+  font-size: 11px;
+  background: #ffffff;
+  color: var(--accent-red-light);
+  border: 1px solid var(--border-danger);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: inherit;
+  font-weight: 600;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.rerecord-banner-cancel-btn:hover:not(:disabled) {
+  background: var(--accent-red-bg);
+}
+
+.rerecord-banner-cancel-btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }

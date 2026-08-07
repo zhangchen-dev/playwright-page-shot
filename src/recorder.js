@@ -29,6 +29,21 @@ class Recorder {
     this.sceneCode = '';        // 场景码（场景名称+随机码）
     this.environment = 'local'; // 环境选择: 'local' | 'dev' | 'prd'
     this.envBaseUrl = '';       // 环境对应的远端基地址
+
+    // ★ 重录模式状态 — 用于"重录该步骤"功能
+    this.reRecord = {
+      active: false,          // 是否处于重录模式
+      dirPath: '',            // 场景目录路径
+      mainModuleIndex: -1,    // 目标主模块索引
+      subModuleIndex: -1,     // 目标主步骤索引
+      targetStepIndex: -1,    // 目标步骤在 subMod.steps 中的索引
+      targetStepId: '',       // 目标步骤的 stepId
+      targetStepUrl: '',      // 目标步骤的 URL（用于重录时定位）
+      targetModuleTitle: '',  // 目标主模块标题（用于 UI 显示）
+      targetSubStepTitle: '', // 目标主步骤标题
+      targetStepTitle: '',    // 目标步骤的 mainTitle
+      baselineStepCount: 0,   // 加载时的步数（用于判断新录了多少步）
+    };
   }
 
   setBrowserManager(bm) {
@@ -72,7 +87,33 @@ class Recorder {
       sceneCode: this.sceneCode, // ★ 场景码
       markedElements: this._getAllMarks(),
       activePageUrl: this._getActivePageUrl(),
+      // ★ 重录模式信息（用于 UI 提示）
+      reRecord: this.reRecord.active ? {
+        active: true,
+        mainModuleIndex: this.reRecord.mainModuleIndex,
+        subModuleIndex: this.reRecord.subModuleIndex,
+        targetStepIndex: this.reRecord.targetStepIndex,
+        targetStepId: this.reRecord.targetStepId,
+        targetStepUrl: this.reRecord.targetStepUrl,
+        targetModuleTitle: this.reRecord.targetModuleTitle,
+        targetSubStepTitle: this.reRecord.targetSubStepTitle,
+        targetStepTitle: this.reRecord.targetStepTitle,
+        baselineStepCount: this.reRecord.baselineStepCount,
+        // ★ 新增步数（用于提示"录制了 N 步"）
+        newStepCount: Math.max(0, this._countTotalSteps() - this.reRecord.baselineStepCount),
+      } : null,
     };
+  }
+
+  /** 统计当前 mainModules 中所有步骤的总数 */
+  _countTotalSteps() {
+    let count = 0;
+    for (const mainMod of this.mainModules) {
+      for (const subMod of (mainMod.subModules || [])) {
+        if (subMod.steps) count += subMod.steps.length;
+      }
+    }
+    return count;
   }
 
   _getActivePageUrl() {
@@ -98,6 +139,8 @@ class Recorder {
       case 'endAndSave': return this._endAndSave(msg);
       case 'clearRecording': return this._clearRecording(msg);
       case 'continueRecording': return this._continueRecording(msg);
+      case 'startReRecord': return this._startReRecord(msg);   // ★ 重录该步骤
+      case 'cancelReRecord': return this._cancelReRecord(msg); // ★ 取消重录
       default: return null;
     }
   }
@@ -352,8 +395,14 @@ class Recorder {
 
   async _endAndSave(msg) {
     const { pageId, modName, mainModName, mainModDesc, resourceBaseUrl, introduction,
-            environment, sceneCode, envBaseUrl } = msg;
+            environment, sceneCode, envBaseUrl, reRecordSaveMode } = msg;
     const activePageId = pageId || this._getActivePageId();
+
+    // ★ 如果是重录模式且没有新录制的步骤，先尝试将残留的标记清掉（不报错）
+    if (this.reRecord.active && this.getNewStepCount() === 0) {
+      console.log('[Recorder] 重录模式下没有新步骤，取消重录');
+      this._resetReRecord();
+    }
 
     const mainMod = this._getCurrentMainModule();
     if (mainMod) {
@@ -389,6 +438,12 @@ class Recorder {
     this.envBaseUrl = envBaseUrl || '';
 
     try {
+      // ★ 重录模式：根据用户选择的保存模式调整 mainModules
+      if (this.reRecord.active && reRecordSaveMode) {
+        this._applyReRecordSaveMode(reRecordSaveMode);
+        this._resetReRecord();
+      }
+
       this._fixStepNavigationLinks();
 
       // ★ 注入 originName（仅远端环境）
@@ -415,6 +470,7 @@ class Recorder {
       this.environment = 'local'; // ★ 重置环境
       this.envBaseUrl = ''; // ★ 重置远端地址
       this.pageMarks.clear();
+      this._resetReRecord();
 
       console.log(`[Recorder] 录制已结束，文件已保存到: ${result.outputDir}`);
       this.lastExportDir = result.outputDir;
@@ -427,6 +483,178 @@ class Recorder {
       console.error('[Recorder] 导出失败:', err);
       return { stateChanged: false, response: { type: 'error', message: '导出失败: ' + err.message } };
     }
+  }
+
+  /**
+   * ★ 重录保存模式应用 — 根据用户选择的模式调整 mainModules
+   * @param {string} mode - 'replace' (覆盖) | 'insert' (插入) | 'replace-single' (一步替换)
+   */
+  _applyReRecordSaveMode(mode) {
+    if (!this.reRecord.active) return;
+    const { mainModuleIndex, subModuleIndex, targetStepIndex } = this.reRecord;
+    if (mainModuleIndex < 0 || mainModuleIndex >= this.mainModules.length) return;
+    const mainMod = this.mainModules[mainModuleIndex];
+    if (!mainMod) return;
+    if (subModuleIndex < 0 || subModuleIndex >= mainMod.subModules.length) return;
+    const subMod = mainMod.subModules[subModuleIndex];
+    if (!subMod || !subMod.steps) return;
+    if (targetStepIndex < 0 || targetStepIndex >= subMod.steps.length) return;
+
+    const newCount = this.getNewStepCount();
+    if (newCount <= 0) return;
+
+    // ★ 当前 subMod 的旧步数 = 总步数 - 新增步数
+    //    新步骤只追加到当前 subMod，其他 subMod 步数不变
+    const oldStepsInThisSubMod = (subMod.steps || []).length - newCount;
+
+    // 旧步数（基线时的步数）和新步数（用户新增的步数）
+    const oldSteps = subMod.steps.slice(0, oldStepsInThisSubMod);
+    const newSteps = subMod.steps.slice(oldStepsInThisSubMod);
+
+    if (mode === 'replace') {
+      // 覆盖模式：移除 targetStepIndex 及之后的所有旧步骤，用新步骤替代
+      const keptOldSteps = oldSteps.slice(0, targetStepIndex);
+      subMod.steps = [...keptOldSteps, ...newSteps];
+    } else if (mode === 'insert') {
+      // 插入模式：在 targetStepIndex 之后插入新步骤，原步骤全部保留
+      const before = oldSteps.slice(0, targetStepIndex + 1);
+      const after = oldSteps.slice(targetStepIndex + 1);
+      subMod.steps = [...before, ...newSteps, ...after];
+    } else {
+      // ★ 单步替换（replace-single）：仅替换目标步骤，保留目标之后的步骤
+      //    之前错误地与 replace 模式相同（删除目标后所有步骤），现已修正
+      const before = oldSteps.slice(0, targetStepIndex);
+      const after = oldSteps.slice(targetStepIndex + 1);
+      subMod.steps = [...before, ...newSteps, ...after];
+    }
+
+    // 重新编号所有步骤（全局 step1, step2, ...）并修复 nextStepId
+    this._renumberAllSteps();
+    console.log(`[Recorder] 重录保存模式: ${mode} → 总步数 ${this.stepCount}`);
+  }
+
+  /**
+   * ★ 全局重新编号所有步骤的 stepId 和文件引用
+   * 同时重置 isEndRecording / nextStepId，并修复 htmlContent 中的导航脚本
+   */
+  _renumberAllSteps() {
+    // 第一遍：分配新的 stepId（从 step1 开始全局递增）
+    let stepNum = 0;
+    // 记录每个 step 的旧 id → 新 id 映射
+    const idMap = new Map();
+    for (const mainMod of this.mainModules) {
+      for (const subMod of (mainMod.subModules || [])) {
+        if (!subMod.steps) continue;
+        for (let i = 0; i < subMod.steps.length; i++) {
+          stepNum++;
+          const newId = 'step' + stepNum;
+          const snapshot = subMod.steps[i];
+          const oldId = snapshot.stepId;
+          idMap.set(oldId, newId);
+        }
+      }
+    }
+
+    // 第二遍：真正修改 step 字段和 htmlContent
+    stepNum = 0;
+    for (const mainMod of this.mainModules) {
+      for (const subMod of (mainMod.subModules || [])) {
+        if (!subMod.steps) continue;
+        for (let i = 0; i < subMod.steps.length; i++) {
+          stepNum++;
+          const newId = 'step' + stepNum;
+          const snapshot = subMod.steps[i];
+          const oldId = snapshot.stepId;
+
+          // ★ 记录旧的文件引用（用于后续更新 htmlContent 中的链接）
+          //    重编号后 cssFile/iframeFiles 字段会更新为新名，但 htmlContent 中的
+          //    <link href="./oldId.css"> 和 <iframe src="./oldId_iframe_1.html">
+          //    仍指向旧文件名。导出时目录被清空重写，旧文件名不存在 → CSS 丢失。
+          const oldCssFile = snapshot.cssFile;
+          const oldIframeFilenames = (Array.isArray(snapshot.iframeFiles)
+            ? snapshot.iframeFiles.map((f) => f.filename)
+            : []);
+
+          // 更新字段
+          snapshot.stepId = newId;
+          snapshot.htmlFile = newId + '.html';
+          snapshot.cssFile = newId + '.css';
+          // iframe 文件名也按 stepId 重命名
+          if (Array.isArray(snapshot.iframeFiles)) {
+            let iframeIdx = 0;
+            for (const iframe of snapshot.iframeFiles) {
+              iframeIdx++;
+              iframe.filename = newId + '_iframe_' + iframeIdx + '.html';
+              if (iframe.cssFilename) {
+                iframe.cssFilename = newId + '_iframe_' + iframeIdx + '.css';
+              }
+            }
+          }
+
+          // ★ 修复 htmlContent 中的 CSS / iframe 文件引用
+          //    将 ./oldCssFile → ./newCssFile，./oldIframeFile → ./newIframeFile
+          if (snapshot.htmlContent) {
+            if (oldCssFile && oldCssFile !== snapshot.cssFile) {
+              snapshot.htmlContent = snapshot.htmlContent
+                .split('./' + oldCssFile).join('./' + snapshot.cssFile);
+            }
+            if (oldIframeFilenames.length > 0 && Array.isArray(snapshot.iframeFiles)) {
+              for (let ii = 0; ii < oldIframeFilenames.length; ii++) {
+                const oldFn = oldIframeFilenames[ii];
+                const newFn = snapshot.iframeFiles[ii]
+                  ? snapshot.iframeFiles[ii].filename : null;
+                if (oldFn && newFn && oldFn !== newFn) {
+                  snapshot.htmlContent = snapshot.htmlContent
+                    .split('./' + oldFn).join('./' + newFn);
+                }
+              }
+            }
+          }
+
+          // ★ 修复 nextStepId：使用 stepNum + 1（下一位置的 newId）
+          //    注意：subMod.steps[i + 1].stepId 此时还是旧 ID，不能直接使用
+          //    isEndRecording 保持原值（不覆盖）：保留原始的"子模块结束"和"录制结束"标记
+          if (i < subMod.steps.length - 1) {
+            snapshot.nextStepId = 'step' + (stepNum + 1);
+          } else {
+            snapshot.nextStepId = null;
+            // ★ 子模块最后一步：如果原来是 endRecording 才保留（避免覆盖中间子模块的结束标记）
+            if (!('isEndRecording' in snapshot)) {
+              snapshot.isEndRecording = true;
+            }
+          }
+        }
+      }
+    }
+
+    // ★ 第三遍：根据 nextStepId 修复 htmlContent 中的 nav script
+    //  - 有 nextStepId：将 htmlContent 中的 var nextStep 替换为正确的 nextStepId
+    //  - 无 nextStepId（最后一步/子模块结束）：移除整个 navigation script
+    //    这是修复"重录后下一步跳转错误"的关键：旧 var nextStep 可能指向一个不存在的 stepId
+    const navScriptRegex = /<script>\s*\(function\(\)\s*\{[\s\S]*?var nextStep = "[^"]*";[\s\S]*?\}\)\(\);\s*<\/script>/;
+    const navVarRegex = /var nextStep = "[^"]*";/;
+    for (const mainMod of this.mainModules) {
+      for (const subMod of (mainMod.subModules || [])) {
+        if (!subMod.steps) continue;
+        for (const snapshot of subMod.steps) {
+          if (!snapshot.htmlContent) continue;
+          if (snapshot.nextStepId) {
+            // ★ 有下一步：将 var nextStep 替换为正确的 nextStepId
+            const newNavVar = 'var nextStep = "' + snapshot.nextStepId + '";';
+            if (navVarRegex.test(snapshot.htmlContent)) {
+              snapshot.htmlContent = snapshot.htmlContent.replace(navVarRegex, newNavVar);
+            }
+          } else {
+            // ★ 无下一步（最后一步/子模块结束）：移除整个 navigation script
+            if (navScriptRegex.test(snapshot.htmlContent)) {
+              snapshot.htmlContent = snapshot.htmlContent.replace(navScriptRegex, '');
+            }
+          }
+        }
+      }
+    }
+
+    this.stepCount = stepNum;
   }
 
   _clearRecording(msg) {
@@ -444,6 +672,7 @@ class Recorder {
     this.environment = 'local';
     this.envBaseUrl = '';
     this.pageMarks.clear();
+    this._resetReRecord();
 
     console.log('[Recorder] 录制已清空');
     this._notifyStateChange();
@@ -459,7 +688,13 @@ class Recorder {
       return { stateChanged: false, response: { type: 'error', message: '录制数据无效' } };
     }
     this.sceneConfig = data.sceneConfig || { sceneTitle: '', sceneSubTitle: '', sceneName: '' };
-    this.sceneCode = data.sceneCode || '';
+    // ★ 关键修复：sceneCode 必须有兜底值，否则"结束并保存"对话框会卡死
+    //   - 优先使用 data.sceneCode
+    //   - 兜底使用 sceneConfig.sceneName（从目录名可推导）
+    //   - 最后兜底使用时间戳生成 REC_xxxxxx
+    this.sceneCode = data.sceneCode
+      || (this.sceneConfig && this.sceneConfig.sceneName)
+      || ('REC_' + Date.now().toString(36).toUpperCase().slice(-6));
     this.mainModules = data.mainModules;
     this.currentMainModuleIndex = data.currentMainModuleIndex ?? -1;
     this.currentSubModuleIndex = data.currentSubModuleIndex ?? -1;
@@ -476,6 +711,155 @@ class Recorder {
     console.log(`[Recorder] 继续录制: ${this.sceneConfig.sceneTitle} (${this.sceneCode}), 已有 ${this.stepCount} 步`);
     this._notifyStateChange();
     return { stateChanged: true };
+  }
+
+  /**
+   * ★ 重录该步骤 — 加载已存在的场景并将光标定位到目标步骤
+   * 后续用户录制的步骤会追加到目标步骤之后
+   */
+  _startReRecord(msg) {
+    const { data, dirPath, mainModuleIndex, subModuleIndex, stepIndex } = msg;
+    if (!data || !data.mainModules) {
+      return { stateChanged: false, response: { type: 'error', message: '录制数据无效' } };
+    }
+    if (mainModuleIndex < 0 || mainModuleIndex >= data.mainModules.length) {
+      return { stateChanged: false, response: { type: 'error', message: '主模块索引无效' } };
+    }
+    const mainMod = data.mainModules[mainModuleIndex];
+    if (!mainMod) {
+      return { stateChanged: false, response: { type: 'error', message: '主模块不存在' } };
+    }
+    if (subModuleIndex < 0 || subModuleIndex >= mainMod.subModules.length) {
+      return { stateChanged: false, response: { type: 'error', message: '主步骤索引无效' } };
+    }
+    const subMod = mainMod.subModules[subModuleIndex];
+    if (!subMod || !subMod.steps || stepIndex < 0 || stepIndex >= subMod.steps.length) {
+      return { stateChanged: false, response: { type: 'error', message: '目标步骤不存在' } };
+    }
+    const targetSnapshot = subMod.steps[stepIndex];
+
+    // 1. 恢复完整场景状态
+    this.sceneConfig = data.sceneConfig || { sceneTitle: '', sceneSubTitle: '', sceneName: '' };
+    // ★ 关键修复：sceneCode 必须有兜底值，否则"结束并保存"对话框会卡死
+    this.sceneCode = data.sceneCode
+      || (this.sceneConfig && this.sceneConfig.sceneName)
+      || ('REC_' + Date.now().toString(36).toUpperCase().slice(-6));
+    this.mainModules = JSON.parse(JSON.stringify(data.mainModules));
+    this.environment = data.environment || 'local';
+    this.envBaseUrl = data.envBaseUrl || '';
+    this.resourceBaseUrl = '';
+    this.stepCount = data.stepCount || 0;
+    this.elementIdCounter = 0;
+
+    // 2. 将光标定位到目标主步骤（用户可以继续在子步骤后追加）
+    this.currentMainModuleIndex = mainModuleIndex;
+    this.currentSubModuleIndex = subModuleIndex;
+    this.pageMarks.clear();
+
+    // 3. ★ 设置重录模式状态
+    this.reRecord.active = true;
+    this.reRecord.dirPath = dirPath || '';
+    this.reRecord.mainModuleIndex = mainModuleIndex;
+    this.reRecord.subModuleIndex = subModuleIndex;
+    this.reRecord.targetStepIndex = stepIndex;
+    this.reRecord.targetStepId = targetSnapshot.stepId;
+    this.reRecord.targetStepUrl = this._extractStepUrl(targetSnapshot) || '';
+    this.reRecord.targetModuleTitle = mainMod.mainModuleName || '';
+    this.reRecord.targetSubStepTitle = subMod.mainStepTitle || '';
+    this.reRecord.targetStepTitle = this._extractStepTitle(targetSnapshot) || '';
+    this.reRecord.baselineStepCount = this._countTotalSteps();
+
+    // 4. 准备下一步的 stepId
+    this.phase = 'recording';
+    this.currentStepId = this._generateStepId();
+    this.nextStepId = this._generateStepId();
+
+    console.log(
+      `[Recorder] 重录模式: 场景="${this.sceneConfig.sceneTitle}", ` +
+      `目标 [${mainModuleIndex}.${subModuleIndex}.${stepIndex}] (${targetSnapshot.stepId}), URL=${this.reRecord.targetStepUrl}`
+    );
+    this._notifyStateChange();
+    return {
+      stateChanged: true,
+      response: {
+        type: 'reRecordStarted',
+        targetStepUrl: this.reRecord.targetStepUrl,
+        targetStepId: this.reRecord.targetStepId,
+        targetModuleTitle: this.reRecord.targetModuleTitle,
+        targetSubStepTitle: this.reRecord.targetSubStepTitle,
+        targetStepTitle: this.reRecord.targetStepTitle,
+        newStepCount: 0,
+      },
+    };
+  }
+
+  /**
+   * ★ 取消重录模式 — 重新加载原始数据并恢复配置阶段
+   */
+  _cancelReRecord(msg) {
+    if (!this.reRecord.active) {
+      return { stateChanged: false };
+    }
+    // 重置到 config 阶段
+    this.phase = 'config';
+    this.sceneConfig = { sceneTitle: '', sceneSubTitle: '', sceneName: '' };
+    this.mainModules = [];
+    this.currentMainModuleIndex = -1;
+    this.currentSubModuleIndex = -1;
+    this.stepCount = 0;
+    this.elementIdCounter = 0;
+    this.currentStepId = null;
+    this.nextStepId = null;
+    this.sceneCode = '';
+    this.environment = 'local';
+    this.envBaseUrl = '';
+    this.pageMarks.clear();
+    this._resetReRecord();
+    this._notifyStateChange();
+    return { stateChanged: true, response: { type: 'reRecordCancelled' } };
+  }
+
+  /** 重置重录模式状态 */
+  _resetReRecord() {
+    this.reRecord.active = false;
+    this.reRecord.dirPath = '';
+    this.reRecord.mainModuleIndex = -1;
+    this.reRecord.subModuleIndex = -1;
+    this.reRecord.targetStepIndex = -1;
+    this.reRecord.targetStepId = '';
+    this.reRecord.targetStepUrl = '';
+    this.reRecord.targetModuleTitle = '';
+    this.reRecord.targetSubStepTitle = '';
+    this.reRecord.targetStepTitle = '';
+    this.reRecord.baselineStepCount = 0;
+  }
+
+  /**
+   * 从快照中提取 URL（优先使用 url 字段；webview 模式使用 htmlContent 顶部 URL）
+   */
+  _extractStepUrl(snapshot) {
+    if (!snapshot) return '';
+    if (snapshot.url) return snapshot.url;
+    return '';
+  }
+
+  /**
+   * 从快照中提取主标题
+   */
+  _extractStepTitle(snapshot) {
+    if (!snapshot) return '';
+    if (Array.isArray(snapshot.marks) && snapshot.marks.length > 0) {
+      return snapshot.marks[0].mainTitle || snapshot.marks[0].subTitle || '';
+    }
+    return '';
+  }
+
+  /**
+   * ★ 统计重录模式下新录制的步数
+   */
+  getNewStepCount() {
+    if (!this.reRecord.active) return 0;
+    return Math.max(0, this._countTotalSteps() - this.reRecord.baselineStepCount);
   }
 
   // ===== 辅助方法 =====

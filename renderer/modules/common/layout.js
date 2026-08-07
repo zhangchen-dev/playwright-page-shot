@@ -1,13 +1,13 @@
-/**
- * 三栏布局视图管理：窗口置顶 / 布局计算 / 视图切换 / 菜单事件
- */
+/** 三栏布局视图管理：窗口置顶 / 布局计算 / 视图切换 / 菜单事件 */
 import { appState, CONSTANTS } from './state.js';
 import { api } from './api.js';
 import { toggleFullscreenPreview, closeRightPanel } from '../preview/preview.js';
 import { rerenderPanel } from '../app.js';
 import { renderManagementView } from '../management/management-view.js';
 import { renderSettingsView } from '../settings/settings-view.js';
+import { renderDemoView } from '../demo/demo-view.js';
 import { showBanner, hideBanner } from './banner.js';
+import { showConfirmDialog } from './feedback.js';
 
 // ★ 根据录制模式 + 浏览器状态 + 浏览器模式，条件控制窗口置顶
 export function updateAlwaysOnTop() {
@@ -51,6 +51,9 @@ export function updateLayout() {
 
 /** 切换视图（录制 / 管理 / 设置） */
 export function switchView() {
+  // ★ 防御：清理残留 dialog overlay（防止异常残留阻挡 UI）
+  document.querySelectorAll('.dialog-overlay').forEach((o) => o.remove());
+
   // ★ 退出全屏（如果在全屏中）
   if (document.body.classList.contains('fullscreen-preview')) {
     toggleFullscreenPreview(false);
@@ -79,7 +82,7 @@ export function switchView() {
   // 更新中间列标题
   const middleTitle = document.getElementById('middleTitle');
   if (middleTitle) {
-    const titles = { recording: '页面录制', management: '后台管理', settings: '设置' };
+    const titles = { recording: '页面录制', management: '场景管理', demo: '定制演示', settings: '设置' };
     middleTitle.textContent = titles[appState.currentView] || '页面录制';
   }
 
@@ -88,6 +91,8 @@ export function switchView() {
     rerenderPanel();
   } else if (appState.currentView === 'management') {
     renderManagementView();
+  } else if (appState.currentView === 'demo') {
+    renderDemoView();
   } else if (appState.currentView === 'settings') {
     renderSettingsView();
   }
@@ -170,16 +175,56 @@ export function showRecordingBanner() {
   showBanner();
 }
 
+/**
+ * ★ 判断录制是否处于"未完成"状态
+ * - 配置阶段：未开始
+ * - 录制阶段：已开始但还没结束保存（保留浏览器会话）
+ * @returns {boolean}
+ */
+export function isRecordingUnsaved() {
+  return appState.state.phase === 'recording';
+}
+
+/**
+ * ★ 切换菜单的统一入口（带录制未完成提示）
+ * @param {string} view 目标视图
+ */
+export function requestSwitchView(view) {
+  if (!view) return;
+  // ★ 防御：清理可能残留的 dialog overlay（防止异常残留阻挡 UI）
+  document.querySelectorAll('.dialog-overlay').forEach((o) => o.remove());
+  if (view === appState.currentView) return;
+
+  // ★ 如果当前在录制中（未保存），切换菜单时提醒
+  //    但在继续录制模式下跳过该对话框（用户来自管理视图，已确认要继续）
+  if (appState.currentView === 'recording' && isRecordingUnsaved() && !appState._continueRecordingMode) {
+    showConfirmDialog(
+      '录制未完成',
+      '当前录制尚未保存。\n切换菜单后浏览器会话会保留，您可以随时切回继续录制。\n\n确定要切换菜单吗？',
+      () => doSwitchView(view),
+      {
+        confirmText: '确定切换',
+        cancelText: '留在录制',
+        danger: false,
+      }
+    );
+    return;
+  }
+  doSwitchView(view);
+}
+
+function doSwitchView(view) {
+  appState.currentView = view;
+  switchView();
+}
+
 /** ★ 菜单 + 按钮事件初始化 */
 export function initLayoutEvents() {
   // 菜单项点击
   document.querySelectorAll('.menu-item').forEach((item) => {
     item.addEventListener('click', () => {
       const view = item.dataset.view;
-      if (view && view !== appState.currentView) {
-        appState.currentView = view;
-        switchView();
-      }
+      if (view) requestSwitchView(view);
     });
   });
 

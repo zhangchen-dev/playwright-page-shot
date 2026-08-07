@@ -54,8 +54,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ★ 继续录制
   continueRecording: (dirPath) => ipcRenderer.invoke('continue-recording', dirPath),
 
+  // ★ 重录该步骤
+  rerecordStep: (payload) => ipcRenderer.invoke('rerecord-step', payload),
+  cancelRerecord: () => ipcRenderer.invoke('cancel-rerecord'),
+  reloadRecording: (dirPath) => ipcRenderer.invoke('reload-recording', dirPath),
+
   // ★ 关闭浏览器
   closeBrowser: () => ipcRenderer.invoke('close-browser'),
+
+  // ★ 打开外部 URL（系统默认应用，处理 mailto:/tel:/ftp: 等非 http 协议）
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
 
   // ★ 凭证管理（密码快捷登录）
   getCredentials: (domain) => ipcRenderer.invoke('get-credentials', domain),

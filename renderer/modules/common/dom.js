@@ -22,6 +22,36 @@ export function labelEl(text, required) {
   return label;
 }
 
+/**
+ * ★ 创建表单字段组（label + input 包装为统一容器）
+ * @param {object} opts
+ * @param {string} opts.label - 标签文字
+ * @param {boolean} [opts.required] - 是否必填
+ * @param {string} [opts.placeholder] - 占位符
+ * @param {string} [opts.type='text'] - 输入类型
+ * @param {string} [opts.id] - input id
+ * @param {string} [opts.value] - 初始值
+ * @param {string} [opts.hint] - 字段下方提示文字
+ * @param {string} [opts.style] - 额外样式（用于 sceneCodeInput 等 monospace）
+ * @returns {{ wrapper: HTMLDivElement, input: HTMLInputElement }}
+ */
+export function formField(opts) {
+  const wrapper = el('div', 'form-field');
+  wrapper.appendChild(labelEl(opts.label, opts.required));
+  const input = el('input', 'input-field');
+  input.type = opts.type || 'text';
+  if (opts.placeholder) input.placeholder = opts.placeholder;
+  if (opts.id) input.id = opts.id;
+  if (opts.value !== undefined) input.value = opts.value;
+  if (opts.style) input.style.cssText = opts.style;
+  wrapper.appendChild(input);
+  if (opts.hint) {
+    const hint = el('div', 'form-field-hint', opts.hint);
+    wrapper.appendChild(hint);
+  }
+  return { wrapper, input };
+}
+
 /** 缩短 URL 用于展示 */
 export function shortenUrl(url) {
   if (!url || url === 'about:blank') return '空白页';

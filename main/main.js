@@ -93,6 +93,64 @@ async function createPanelWindow() {
     panelWindow.show();
   });
 
+  // ★ webview 新窗口处理 — Electron 22+ 移除了 <webview> 的 new-window 事件
+  //    使用 setWindowOpenHandler 在 Chromium 层面拦截所有新窗口请求
+  //    覆盖 window.open / target="_blank" 链接点击 / form target="_blank" 提交
+  //
+  //    ★★ 根因修复（旧方案问题）：
+  //    旧方案在 did-finish-load 中注入 JS 覆盖 window.open + 调用 window.location.href
+  //    问题1: window.location.href 和 IPC 的 webview.loadURL 双重导航竞争 → 导航失败
+  //    问题2: 覆盖后的 window.open 返回 null → 应用认为弹窗被拦截 → "点击没反应"
+  //    问题3: 若应用在 did-finish-load 前缓存了 window.open 引用，JS 覆盖被绕过
+  //    修复: 完全移除 JS 覆盖，仅用 setWindowOpenHandler（Chromium 层面，无法被 JS 绕过）
+  //          直接在主进程中调用 wc.loadURL() 导航（不走 IPC 绕行渲染进程，更可靠）
+  panelWindow.webContents.on('did-attach-webview', (event, wc) => {
+    console.log('[main] did-attach-webview 触发, webviewId:', wc.id);
+
+    // ★ setWindowOpenHandler — 拦截所有新窗口请求 (window.open / target="_blank" / form target="_blank")
+    //    Chromium 层面拦截，无论应用是否缓存 window.open 引用都会触发
+    wc.setWindowOpenHandler((details) => {
+      const newUrl = details.url;
+      console.log('[main] setWindowOpenHandler 拦截新窗口, url:', newUrl);
+      if (!newUrl || newUrl === 'about:blank') return { action: 'deny' };
+
+      // 非 http(s) 协议：用系统默认应用打开（mailto:/tel:/ftp: 等）
+      if (!/^https?:\/\//i.test(newUrl)) {
+        const { shell } = require('electron');
+        shell.openExternal(newUrl).catch(() => {});
+        return { action: 'deny' };
+      }
+
+      // ★ 直接在主进程中导航 webview（setTimeout 确保在 setWindowOpenHandler 返回后执行）
+      //    不再通过 IPC 绕行渲染进程（避免监听器未注册/webview 引用过期等问题）
+      setTimeout(() => {
+        try {
+          if (!wc.isDestroyed()) {
+            wc.loadURL(newUrl);
+            console.log('[main] setWindowOpenHandler 已在 webview 中导航:', newUrl);
+          }
+        } catch (err) {
+          console.error('[main] setWindowOpenHandler 直接导航失败，回退到 IPC:', err.message);
+          // 回退：通过 IPC 通知渲染进程
+          if (panelWindow && !panelWindow.isDestroyed()) {
+            panelWindow.webContents.send('webview-open-window', { webviewId: wc.id, url: newUrl });
+          }
+        }
+      }, 0);
+
+      return { action: 'deny' };
+    });
+
+    // ★ did-finish-load — 不再注入 JS 覆盖 window.open
+    //    setWindowOpenHandler 已在 Chromium 层面拦截所有新窗口请求，无需 JS 覆盖
+    //    仅保留调试标记用于诊断
+    wc.on('did-finish-load', () => {
+      wc.executeJavaScript(
+        'if(!window.__recNewTabIntercepted){window.__recNewTabIntercepted=true;console.log("[rec-intercept] setWindowOpenHandler 已激活（Chromium 层面拦截）")}'
+      ).catch(() => {});
+    });
+  });
+
   if (process.argv.includes('--dev')) {
     panelWindow.webContents.openDevTools({ mode: 'detach' });
   }

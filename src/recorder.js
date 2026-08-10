@@ -270,7 +270,7 @@ class Recorder {
    * 使用渲染进程预捕获的 HTML/CSS 数据，不需要 Playwright page 对象
    */
   async _nextStepWebview(msg) {
-    const { url, html, cssContents, isEndRecording: forceEnd } = msg;
+    const { url, html, cssContents, iframes, isEndRecording: forceEnd } = msg;
     const activePageId = 'webview';
     const marks = this.pageMarks.get(activePageId) || [];
 
@@ -282,6 +282,7 @@ class Recorder {
         url,
         html,
         cssContents,
+        iframes,
         stepId: this.currentStepId,
         nextStepId: this.nextStepId,
         marks,

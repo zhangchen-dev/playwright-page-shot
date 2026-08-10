@@ -11,6 +11,54 @@ class Exporter {
   }
 
   /**
+   * ★ 健壮的目录准备 — 删除旧目录 + 重新创建（带重试）
+   *    Windows 上 fs.mkdir({recursive:true}) 对刚删除的目录可能返回 EPERM（文件系统延迟），
+   *    需要重试。同时避免 emptyDir+ensureDir 组合在某些 Electron 环境下的竞态问题。
+   */
+  async _prepareExportDir(exportDir) {
+    // 1. 如果目录已存在，删除整个目录（比 emptyDir 更彻底）
+    if (fs.existsSync(exportDir)) {
+      try {
+        await fs.remove(exportDir);
+      } catch (err) {
+        console.warn('[Exporter] 删除旧目录失败（继续尝试创建）:', err.message);
+      }
+    }
+
+    // 2. 创建目录（带重试，应对 Windows 文件系统延迟）
+    const maxRetries = 3;
+    let lastErr;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await fs.mkdir(exportDir, { recursive: true });
+        console.log('[Exporter] 目录已创建:', exportDir);
+        return; // 成功
+      } catch (err) {
+        lastErr = err;
+        // EEXIST 表示目录已存在，这是正常的（可能 remove 失败但目录还在）
+        if (err.code === 'EEXIST') {
+          console.log('[Exporter] 目录已存在，直接使用:', exportDir);
+          return;
+        }
+        // EPERM/EBUSY 可能是 Windows 文件系统延迟，重试
+        if (err.code === 'EPERM' || err.code === 'EBUSY') {
+          console.warn(`[Exporter] 创建目录失败 (尝试 ${attempt + 1}/${maxRetries}): ${err.code} ${err.message}`);
+          await new Promise((r) => setTimeout(r, 300));
+          continue;
+        }
+        // 其他错误直接抛出
+        throw err;
+      }
+    }
+    // 重试全部失败，最后检查目录是否已存在（Windows 有时对已存在目录返回 EPERM 而非 EEXIST）
+    if (fs.existsSync(exportDir) && fs.statSync(exportDir).isDirectory()) {
+      console.log('[Exporter] 重试失败但目录已存在，直接使用:', exportDir);
+      return;
+    }
+    throw lastErr;
+  }
+
+  /**
    * 导出完整录制数据
    */
   async exportRecording(recorder) {
@@ -19,11 +67,10 @@ class Exporter {
     // ★ 导出目录名优先使用 sceneCode
     const dirName = sceneCode || sceneConfig.sceneName || 'recording';
     const exportDir = path.join(this.outputDir, dirName);
-    // ★ 如果目录已存在则清空（继续录制时覆盖旧场景）
-    if (fs.existsSync(exportDir)) {
-      await fs.emptyDir(exportDir);
-    }
-    await fs.ensureDir(exportDir);
+
+    // ★ 健壮的目录准备：先删除整个目录再重新创建（避免 emptyDir+ensureDir 在 Windows 上的 EPERM 竞态）
+    //    Windows 上 fs.mkdir({recursive:true}) 对刚操作的目录可能返回 EPERM，需要重试
+    await this._prepareExportDir(exportDir);
 
     // 收集所有快照
     const allSnapshots = [];

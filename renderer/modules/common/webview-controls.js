@@ -252,42 +252,27 @@ export function initBrowserModeControls() {
       }
     });
 
-    // ★ new-window — 处理 window.open / target="_blank"
-    //    必须配合 webview 标签的 webpreferences="allowpopups" 才会触发此事件。
-    //    否则 Electron 会静默阻止弹窗，新标签页无响应。
-    webview.addEventListener('new-window', (event) => {
-      // 阻止默认行为（默认会尝试在 Electron 中打开新窗口，我们接管）
-      event.preventDefault();
+    // ★ 新窗口处理 — Electron 22+ 移除了 <webview> 的 new-window 事件
+    //    方案1: 主进程 setWindowOpenHandler 拦截 window.open() (通过 did-attach-webview 设置)
+    //    方案2: 渲染进程在 did-finish-load 中注入脚本，覆盖 window.open + 拦截 target="_blank" 点击
+    //    两个方案同时使用，互为补充
 
-      const newUrl = event.url;
-      if (!newUrl) return;
-
-      // 非 http(s) 协议：用系统默认应用打开（mailto:/tel:/ftp: 等）
-      if (!/^https?:\/\//i.test(newUrl)) {
-        if (window.electronAPI && window.electronAPI.openExternal) {
-          window.electronAPI.openExternal(newUrl).then((result) => {
-            if (!result || !result.success) {
-              showToast('无法打开链接: ' + (result?.error || newUrl), 'error');
-            }
-          }).catch((err) => {
-            showToast('打开链接失败: ' + err.message, 'error');
-          });
-        } else {
-          showToast('当前环境不支持打开外部链接: ' + newUrl, 'warning');
+    // 方案1: 接收主进程 IPC 通知
+    if (window.electronAPI && window.electronAPI.onWebviewOpenWindow) {
+      window.electronAPI.onWebviewOpenWindow((data) => {
+        const newUrl = data.url;
+        if (!newUrl) return;
+        try {
+          webview.loadURL(newUrl);
+          console.log('[panel] webview-open-window 已在当前 webview 中导航: ' + newUrl);
+        } catch (err) {
+          console.error('[panel] 导航新窗口 URL 失败:', err);
+          showToast('导航失败: ' + err.message, 'error');
         }
-        return;
-      }
+      });
+    }
 
-      // http(s) 协议：在当前 webview 中导航
-      //    did-start-loading → did-finish-load 事件会自动触发，element-helper
-      //    和 credential-helper 脚本会重新注入，录制/选择能力在导航后保持可用。
-      try {
-        webview.loadURL(newUrl);
-        console.log('[panel] new-window 已在当前 webview 中导航: ' + newUrl);
-      } catch (err) {
-        console.error('[panel] 导航新窗口 URL 失败:', err);
-        showToast('导航失败: ' + err.message, 'error');
-      }
-    });
+    // ★ 新窗口拦截由主进程 did-attach-webview + did-finish-load 统一注入
+    //    此处不再重复注入（避免 __recNewTabIntercepted 标志冲突）
   }
 }

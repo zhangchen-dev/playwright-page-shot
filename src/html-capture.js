@@ -182,7 +182,7 @@ class HtmlCapture {
    * @param {boolean} options.isEndRecording - 是否是录制的最后一步
    * @returns {object} 快照对象
    */
-  async processFromCapturedData({ url, html, cssContents, stepId, nextStepId, marks, isEndRecording }) {
+  async processFromCapturedData({ url, html, cssContents, iframes, stepId, nextStepId, marks, isEndRecording }) {
     const currentUrl = url || '';
     const rawHtml = html || '<!DOCTYPE html><html><body></body></html>';
 
@@ -224,8 +224,62 @@ class HtmlCapture {
       }
     }
 
-    // 6. iframe 处理 — webview 模式下跳过（返回空数组）
+    // 6. iframe 处理 — 使用渲染进程预捕获的 iframe 数据生成文件
+    //    ★ iframe 内容必须在 webview（渲染进程）中捕获（有 cookie/同源环境），
+    //    后端 Node.js 无法 fetch 跨域/需鉴权的 iframe 内容。
+    //    iframes 参数格式: [{ index, src, html, cssContents, inlineCss }, ...]
+    //    ★ 按 index 匹配（不依赖 src），支持无 src 的 JS 动态写入 iframe
     const iframeFiles = [];
+    const iframeElements = $('iframe');
+    let iframeIdx = 0;
+    for (let i = 0; i < iframeElements.length; i++) {
+      const iframeEl = iframeElements[i];
+      let src = $(iframeEl).attr('src') || '';
+
+      // ★ 按 index 匹配预捕获的 iframe 数据（不依赖 src）
+      //    无 src 的 iframe（JS 动态写入内容）也能匹配
+      const matched = (iframes || []).find((f) => f && f.index === i);
+      if (!matched || !matched.html) continue;
+
+      // 处理绝对 URL（如果有 src）
+      let absSrc = src;
+      if (src && !src.startsWith('data:') && !src.startsWith('http')) {
+        try { absSrc = new URL(src, currentUrl).href; } catch (e) { absSrc = src; }
+      }
+
+      // 处理 iframe HTML（复用 _processIframeHtml：移除脚本、修复资源URL、提取内联样式）
+      const baseUrl = absSrc || currentUrl;
+      const processedIframe = this._processIframeHtml(matched.html, baseUrl);
+
+      // 合并 iframe 的外部 CSS（预捕获）+ 内联样式
+      let iframeCss = processedIframe.cssContent || '';
+      if (matched.inlineCss) {
+        iframeCss += '/* ===== inline style ===== */\n' + matched.inlineCss + '\n\n';
+      }
+      for (const cssItem of (matched.cssContents || [])) {
+        if (cssItem && cssItem.content) {
+          const fixedCss = fixCssUrls(cssItem.content, cssItem.url);
+          iframeCss += '/* ===== ' + cssItem.url + ' ===== */\n' + fixedCss + '\n\n';
+        }
+      }
+      iframeCss = deduplicateCSS(iframeCss);
+
+      iframeIdx++;
+      const iframeFilename = stepId + '_iframe_' + iframeIdx + '.html';
+      const iframeCssFilename = stepId + '_iframe_' + iframeIdx + '.css';
+
+      iframeFiles.push({
+        filename: iframeFilename,
+        content: processedIframe.html,
+        cssContent: iframeCss,
+        cssFilename: iframeCssFilename,
+        originalUrl: absSrc || '',
+      });
+
+      // 更新 iframe src 为本地文件名（即使原来没有 src 也设置）
+      $(iframeEl).attr('src', './' + iframeFilename);
+      $(iframeEl).removeAttr('srcdoc');
+    }
 
     // 7. 添加步骤跳转脚本
     const currentStepMarks = marks || [];
@@ -453,8 +507,25 @@ class HtmlCapture {
       : originName;
     window.location.href = baseUrl + nextStep + '.html';
   }
-  elementIds.forEach(function(id) {
+  // ★ 查找元素：先在顶层 document 查找，找不到则遍历所有同域 iframe 的 document
+  function findElementById(id) {
     var el = document.getElementById(id);
+    if (el) return el;
+    // 遍历所有同域 iframe
+    var iframes = document.querySelectorAll('iframe');
+    for (var i = 0; i < iframes.length; i++) {
+      try {
+        var doc = iframes[i].contentDocument || (iframes[i].contentWindow && iframes[i].contentWindow.document);
+        if (doc) {
+          el = doc.getElementById(id);
+          if (el) return el;
+        }
+      } catch(e) { /* 跨域 iframe 跳过 */ }
+    }
+    return null;
+  }
+  elementIds.forEach(function(id) {
+    var el = findElementById(id);
     if (!el) return;
     el.addEventListener('click', handleClick);
     el.style.cursor = 'pointer';

@@ -61,7 +61,7 @@ function registerRecordingMgmtIpc({ recorder, panelWindowGetter }) {
         }
 
         const htmlFiles = fs.readdirSync(exportDir)
-          .filter((f) => f.endsWith('.html'))
+          .filter((f) => f.endsWith('.html') && !f.includes('_iframe_'))
           .sort()
           .map((f, idx) => {
             const info = stepInfoMap.get(f) || {};

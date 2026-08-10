@@ -173,6 +173,18 @@ export function setupWebviewIpcListener() {
     } else if (channel === 'login-submit') {
       // ★ 捕获到登录提交 — 弹出保存密码对话框
       showSavePasswordDialog(data.domain, data.username, data.password);
+    } else if (channel === 'webview-navigate') {
+      // ★ 新窗口导航拦截 — webview 内的 window.open / target="_blank" 被拦截后，
+      //    通过 __recSendToHost 通知宿主页面在当前 webview 中导航
+      const newUrl = data && data.url;
+      if (newUrl) {
+        try {
+          webview.loadURL(newUrl);
+          console.log('[panel] webview-navigate 已在当前 webview 中导航: ' + newUrl);
+        } catch (err) {
+          console.error('[panel] webview-navigate 导航失败:', err);
+        }
+      }
     }
   });
 }
@@ -261,6 +273,35 @@ export async function captureWebviewData() {
   ]);
 
   // 2. 获取清理后的 HTML（移除 script、事件处理器等）
+  //    ★ 在克隆前，先将所有 canvas 元素转为 <img>（SpreadJS/canvas 页面无法用纯 HTML 展示）
+  //    canvas.toDataURL() 直接在 webview 内执行，无需外部库
+  const canvasReplaceCode = [
+    '(function(){',
+    '  var canvases = document.querySelectorAll("canvas");',
+    '  var count = 0;',
+    '  canvases.forEach(function(canvas){',
+    '    try{',
+    '      var dataUrl = canvas.toDataURL("image/png");',
+    '      var img = document.createElement("img");',
+    '      img.src = dataUrl;',
+    '      img.style.cssText = canvas.style.cssText || ("width:" + canvas.width + "px;height:" + canvas.height + "px;");',
+    '      img.setAttribute("data-rec-canvas-replaced", "true");',
+    '      img.width = canvas.width;',
+    '      img.height = canvas.height;',
+    '      // 保留 canvas 的 class 和 id（用于元素选择和样式）',
+    '      if(canvas.className) img.className = canvas.className;',
+    '      if(canvas.id) img.id = canvas.id + "_img";',
+    '      canvas.parentNode.replaceChild(img, canvas);',
+    '      count++;',
+    '    }catch(e){',
+    '      console.warn("[rec] canvas 转图片失败:", e.message);',
+    '    }',
+    '  });',
+    '  return count;',
+    '})()',
+  ].join('\n');
+
+  // ★ 先替换 canvas，再克隆 HTML
   const cleanupCode = [
     '(function(){',
     '  var clone = document.documentElement.cloneNode(true);',
@@ -295,12 +336,93 @@ export async function captureWebviewData() {
     '})()',
   ].join('\n');
 
+  // ★ 4. 捕获所有同域 iframe 的 HTML 和 CSS
+  //    必须在 webview 内执行（继承 cookie 和同源环境），后端无法 fetch
+  //    跨域 iframe 因同源策略无法访问 contentDocument，会被跳过
+  const iframeCaptureCode = [
+    '(async function(){',
+    '  var iframes = Array.from(document.querySelectorAll("iframe"));',
+    '  var results = [];',
+    '  for(var i=0; i<iframes.length; i++){',
+    '    var iframe = iframes[i];',
+    '    var src = iframe.src || "";',
+    '    if(src === "about:blank" || src.indexOf("data:") === 0) continue;',
+    '    try{',
+    '      var doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);',
+    '      if(!doc || !doc.documentElement) continue;',
+    '      // ★ 先将 iframe 内的 canvas 转为图片',
+    '      var iframeCanvases = doc.querySelectorAll("canvas");',
+    '      iframeCanvases.forEach(function(canvas){',
+    '        try{',
+    '          var dataUrl = canvas.toDataURL("image/png");',
+    '          var img = doc.createElement("img");',
+    '          img.src = dataUrl;',
+    '          img.style.cssText = canvas.style.cssText || ("width:" + canvas.width + "px;height:" + canvas.height + "px;");',
+    '          img.width = canvas.width;',
+    '          img.height = canvas.height;',
+    '          if(canvas.className) img.className = canvas.className;',
+    '          if(canvas.id) img.id = canvas.id + "_img";',
+    '          canvas.parentNode.replaceChild(img, canvas);',
+    '        }catch(e){}',
+    '      });',
+    '      var clone = doc.documentElement.cloneNode(true);',
+    '      clone.querySelectorAll("script,noscript").forEach(function(el){el.remove()});',
+    '      clone.querySelectorAll(\'meta[http-equiv="Content-Security-Policy"]\').forEach(function(el){el.remove()});',
+    '      clone.querySelectorAll("base").forEach(function(el){el.remove()});',
+    '      clone.querySelectorAll("*").forEach(function(el){',
+    '        Array.from(el.attributes).forEach(function(attr){',
+    '          if(attr.name.startsWith("on")) el.removeAttribute(attr.name);',
+    '        });',
+    '      });',
+    '      var html = "<!DOCTYPE html>\\n" + clone.outerHTML;',
+    '      var cssContents = [];',
+    '      var links = Array.from(doc.querySelectorAll(\'link[rel="stylesheet"]\'));',
+    '      for(var j=0; j<links.length; j++){',
+    '        var href = links[j].href;',
+    '        if(!href || href.indexOf("data:") === 0) continue;',
+    '        try{',
+    '          var resp = await fetch(href);',
+    '          var text = await resp.text();',
+    '          cssContents.push({url: href, content: text});',
+    '        }catch(e){}',
+    '      }',
+    '      var styles = Array.from(doc.querySelectorAll("style"));',
+    '      var inlineCss = "";',
+    '      styles.forEach(function(s){ inlineCss += s.textContent + "\\n"; });',
+    '      results.push({index: i, src: src, html: html, cssContents: cssContents, inlineCss: inlineCss});',
+    '    }catch(e){',
+    '      console.warn("[rec iframe] capture failed:", src, e.message);',
+    '    }',
+    '  }',
+    '  return JSON.stringify(results);',
+    '})()',
+  ].join('\n');
+
   try {
+    // ★ 先将 canvas 转为图片（SpreadJS 等 canvas 页面无法用纯 HTML 展示）
+    try {
+      const canvasCount = await withTimeout(webview.executeJavaScript(canvasReplaceCode), 3000, 'canvas 替换');
+      if (canvasCount > 0) console.log('[panel] 已将 ' + canvasCount + ' 个 canvas 转为图片');
+    } catch (e) {
+      console.warn('[panel] canvas 替换失败（不阻断主流程）:', e.message);
+    }
+
     const html = await withTimeout(webview.executeJavaScript(cleanupCode), 3000, 'HTML 捕获');
     const cssJson = await withTimeout(webview.executeJavaScript(cssFetchCode), 3000, 'CSS 捕获');
     let cssContents = [];
     try { cssContents = JSON.parse(cssJson); } catch (e) {}
-    return { url, html, cssContents };
+
+    // ★ 捕获 iframe 内容（允许较长超时，因为可能 fetch 多个 iframe 的 CSS）
+    let iframes = [];
+    try {
+      const iframeJson = await withTimeout(webview.executeJavaScript(iframeCaptureCode), 6000, 'iframe 捕获');
+      iframes = JSON.parse(iframeJson || '[]');
+      console.log('[panel] 捕获到 ' + iframes.length + ' 个 iframe');
+    } catch (e) {
+      console.warn('[panel] iframe 捕获失败（不阻断主流程）:', e.message);
+    }
+
+    return { url, html, cssContents, iframes };
   } catch (err) {
     console.warn('[panel] 捕获 webview 数据失败:', err.message);
     return null;

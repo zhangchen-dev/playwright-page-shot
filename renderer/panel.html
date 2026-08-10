@@ -95,10 +95,17 @@
         <div class="preview-loading" id="previewLoading">加载中...</div>
         <!-- ★ Banner 轮播区域（录制视图未开浏览器时显示） -->
         <div id="bannerContainer" class="banner-container" style="display:none;"></div>
-        <!-- ★ 滚动容器：webview 以标准尺寸渲染，溢出滚动 -->
-        <div class="webview-scroll-wrapper" id="webviewScrollWrapper">
-          <div class="webview-scale-wrapper" id="webviewScaleWrapper">
-            <webview id="previewWebview" class="preview-webview-inner" partition="persist:webview" webpreferences="allowpopups"></webview>
+        <!-- ★ Tab 栏（多 webview 切换；target=_blank 拦截后追加 tab） -->
+        <div id="tabBar" class="tab-bar"></div>
+        <!-- ★ Tab 页面容器：每个 tab 一个 <webview>，display 切换显隐 -->
+        <div id="tabPages" class="tab-pages">
+          <!-- 主 tab：保留原录制/缩放逻辑的 #previewWebview -->
+          <div class="webview-tab-page active" data-tab-id="main">
+            <div class="webview-scroll-wrapper" id="webviewScrollWrapper">
+              <div class="webview-scale-wrapper" id="webviewScaleWrapper">
+                <webview id="previewWebview" class="preview-webview-inner" partition="persist:webview" webpreferences="allowpopups"></webview>
+              </div>
+            </div>
           </div>
         </div>
       </div>

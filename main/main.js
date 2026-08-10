@@ -57,14 +57,19 @@ function createAppIcon() {
 
 async function createPanelWindow() {
   const primaryDisplay = screen.getPrimaryDisplay();
-  const { height: screenHeight } = primaryDisplay.workAreaSize;
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
 
-  const panelWidth = 460; // ★ 侧栏64 + 中间380 + 余量
-  const panelHeight = Math.min(screenHeight - 40, 780);
+  // ★ 默认笔记本尺寸 1366×768（用户明确要求）；不挤压侧栏+中间列+右栏
+  const PANEL_DEFAULT_W = 1366;
+  const PANEL_DEFAULT_H = 768;
+  const panelWidth = Math.min(PANEL_DEFAULT_W, screenWidth - 40);
+  const panelHeight = Math.min(PANEL_DEFAULT_H, screenHeight - 40);
 
   panelWindow = new BrowserWindow({
     width: panelWidth,
     height: panelHeight,
+    minWidth: 1100, // ★ 至少容纳左栏+中间列+右栏
+    minHeight: 600,
     center: true, // ★ 默认居中显示，不再强制贴右
     title: '场景录制助手',
     resizable: true,
@@ -76,7 +81,6 @@ async function createPanelWindow() {
     skipTaskbar: false,
     show: false,  // 先隐藏，加载完再显示
     icon: createAppIcon(),
-    minWidth: 400, // ★ 侧栏 + 中间最小可见
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -121,22 +125,11 @@ async function createPanelWindow() {
         return { action: 'deny' };
       }
 
-      // ★ 直接在主进程中导航 webview（setTimeout 确保在 setWindowOpenHandler 返回后执行）
-      //    不再通过 IPC 绕行渲染进程（避免监听器未注册/webview 引用过期等问题）
-      setTimeout(() => {
-        try {
-          if (!wc.isDestroyed()) {
-            wc.loadURL(newUrl);
-            console.log('[main] setWindowOpenHandler 已在 webview 中导航:', newUrl);
-          }
-        } catch (err) {
-          console.error('[main] setWindowOpenHandler 直接导航失败，回退到 IPC:', err.message);
-          // 回退：通过 IPC 通知渲染进程
-          if (panelWindow && !panelWindow.isDestroyed()) {
-            panelWindow.webContents.send('webview-open-window', { webviewId: wc.id, url: newUrl });
-          }
-        }
-      }, 0);
+      // ★ 通知渲染端开新 tab（多 tab 行为）—— 由 tabs.js 创建新 <webview> tag
+      if (panelWindow && !panelWindow.isDestroyed()) {
+        panelWindow.webContents.send('app-open-tab', { url: newUrl, sourceWebviewId: wc.id });
+        console.log('[main] setWindowOpenHandler 已通知渲染端开新 tab:', newUrl);
+      }
 
       return { action: 'deny' };
     });

@@ -110,6 +110,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('browserClosed', (event) => callback());
   },
 
+  // ===== 多 tab（target=_blank 拦截后由 tabs.js 开新 webview tag） =====
+  // ★ 监听主进程推送的 open-tab 事件
+  onAppOpenTab: (callback) => {
+    ipcRenderer.on('app-open-tab', (event, data) => callback(data));
+  },
+  // 兜底：旧 webview-new-window 事件
+  onWebviewNewWindow: (callback) => {
+    ipcRenderer.on('webview-new-window', (event, data) => callback(data));
+  },
+
   // ===== 清理 =====
   removeAllListeners: (channel) => {
     ipcRenderer.removeAllListeners(channel);

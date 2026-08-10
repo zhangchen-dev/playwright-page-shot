@@ -8,6 +8,7 @@ import { updateAlwaysOnTop } from './layout.js';
 import { toggleFullscreenPreview, } from '../preview/preview.js';
 import { syncPreviewStepSelector } from '../preview/step-selector.js';
 import { setupWebviewIpcListener, injectWebviewElementHelper } from '../recording/internal/webview-recording.js';
+import { initTabs } from './tabs.js';
 
 /** ★ 适配页面 — 按比例缩放 webview 到容器 */
 export function applyFitPage(enabled) {
@@ -194,6 +195,9 @@ export function initBrowserModeControls() {
 
   // ★ 设置 webview ipc-message 监听（元素选择事件）
   setupWebviewIpcListener();
+
+  // ★ 多 tab 初始化（target=_blank 拦截后开新 tab）
+  initTabs();
 
   // webview 加载事件
   const webview = document.getElementById('previewWebview');

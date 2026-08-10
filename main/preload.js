@@ -65,6 +65,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ★ 打开外部 URL（系统默认应用，处理 mailto:/tel:/ftp: 等非 http 协议）
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
 
+  // ★ 渲染进程日志转主进程终端（渲染进程 console.log 在终端不可见）
+  logMain: (msg) => ipcRenderer.send('renderer-log', String(msg)),
+
   // ★ webview 新窗口事件 — 主进程 setWindowOpenHandler 拦截后通过 IPC 通知渲染进程
   onWebviewOpenWindow: (callback) => {
     ipcRenderer.on('webview-open-window', (event, data) => callback(data));

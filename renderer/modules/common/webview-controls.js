@@ -8,23 +8,42 @@ import { updateAlwaysOnTop } from './layout.js';
 import { toggleFullscreenPreview, } from '../preview/preview.js';
 import { syncPreviewStepSelector } from '../preview/step-selector.js';
 import { setupWebviewIpcListener, injectWebviewElementHelper } from '../recording/internal/webview-recording.js';
-import { initTabs } from './tabs.js';
+import { initTabs, getActiveTabPage } from './tabs.js';
+
+/**
+ * ★ 取当前激活 tab 的三层结构元素
+ * 主 tab 时返回的就是 #previewWebview / #webviewScaleWrapper / #webviewScrollWrapper，
+ * 与改造前行为完全一致；新 tab 时返回该 tab 自己的一组元素。
+ */
+function getActiveWebviewParts() {
+  const page = getActiveTabPage();
+  if (page) {
+    const webview = page.querySelector('.preview-webview-inner');
+    const scaleWrapper = page.querySelector('.webview-scale-wrapper');
+    const scrollWrapper = page.querySelector('.webview-scroll-wrapper');
+    if (webview && scaleWrapper && scrollWrapper) return { webview, scaleWrapper, scrollWrapper };
+  }
+  return {
+    webview: document.getElementById('previewWebview'),
+    scaleWrapper: document.getElementById('webviewScaleWrapper'),
+    scrollWrapper: document.getElementById('webviewScrollWrapper'),
+  };
+}
 
 /** ★ 适配页面 — 按比例缩放 webview 到容器 */
 export function applyFitPage(enabled) {
   appState.fitPageEnabled = enabled;
-  const wrapper = document.getElementById('webviewScrollWrapper');
   const fitBtn = document.getElementById('fitPageBtn');
   const zoomSelect = document.getElementById('zoomSelect');
 
-  if (!wrapper) return;
+  // ★ 所有 tab 的滚动容器统一切换 fit-mode，避免切 tab 后模式不一致
+  const wrappers = document.querySelectorAll('.webview-scroll-wrapper');
+  wrappers.forEach((w) => w.classList.toggle('fit-mode', !!enabled));
 
   if (enabled) {
-    wrapper.classList.add('fit-mode');
     if (fitBtn) fitBtn.classList.add('active');
     if (zoomSelect) zoomSelect.disabled = true; // 适配模式下禁用手动缩放
   } else {
-    wrapper.classList.remove('fit-mode');
     if (fitBtn) fitBtn.classList.remove('active');
     if (zoomSelect) zoomSelect.disabled = false;
   }
@@ -40,9 +59,7 @@ export function applyFitPage(enabled) {
  *   → 裁剪 webview 布局溢出，滚动区域 = 视觉尺寸，无空白
  */
 export function updateWebviewScale() {
-  const webview = document.getElementById('previewWebview');
-  const scaleWrapper = document.getElementById('webviewScaleWrapper');
-  const scrollWrapper = document.getElementById('webviewScrollWrapper');
+  const { webview, scaleWrapper, scrollWrapper } = getActiveWebviewParts();
   if (!webview || !scaleWrapper || !scrollWrapper) return;
 
   const res = CONSTANTS.WEBVIEW_RESOLUTIONS[appState.currentResolution] || CONSTANTS.WEBVIEW_RESOLUTIONS['1920'];
@@ -256,27 +273,18 @@ export function initBrowserModeControls() {
       }
     });
 
-    // ★ 新窗口处理 — Electron 22+ 移除了 <webview> 的 new-window 事件
-    //    方案1: 主进程 setWindowOpenHandler 拦截 window.open() (通过 did-attach-webview 设置)
-    //    方案2: 渲染进程在 did-finish-load 中注入脚本，覆盖 window.open + 拦截 target="_blank" 点击
-    //    两个方案同时使用，互为补充
-
-    // 方案1: 接收主进程 IPC 通知
+    // ★ 新窗口处理 — 统一走"主进程 setWindowOpenHandler → IPC → tabs.js 开新 tab"
+    //    前提是 <webview> 上带独立布尔属性 allowpopups（见 panel.html / tabs.js 注释）。
+    //    这里的 webview-open-window 是历史兜底通道：同样转成"开新 tab"，不再原地 loadURL
+    //    （原地 loadURL 会覆盖当前页面，也是之前"点了像没反应"的观感来源之一）。
     if (window.electronAPI && window.electronAPI.onWebviewOpenWindow) {
       window.electronAPI.onWebviewOpenWindow((data) => {
-        const newUrl = data.url;
+        const newUrl = data && data.url;
         if (!newUrl) return;
-        try {
-          webview.loadURL(newUrl);
-          console.log('[panel] webview-open-window 已在当前 webview 中导航: ' + newUrl);
-        } catch (err) {
-          console.error('[panel] 导航新窗口 URL 失败:', err);
-          showToast('导航失败: ' + err.message, 'error');
-        }
+        import('./tabs.js')
+          .then((m) => m.requestNewTab(newUrl, 'webview-open-window'))
+          .catch((err) => showToast('打开新标签页失败: ' + err.message, 'error'));
       });
     }
-
-    // ★ 新窗口拦截由主进程 did-attach-webview + did-finish-load 统一注入
-    //    此处不再重复注入（避免 __recNewTabIntercepted 标志冲突）
   }
 }

@@ -1,12 +1,18 @@
 /**
  * 应用内多 tab 管理器（基于多个 <webview> tag，display 切换显隐）
  *
- * - 主 tab = #previewWebview（保留在 panel.html 已有）
- * - target=_blank 拦截后由 main.js 通过 IPC 'app-open-tab' 通知本模块开新 webview 实例
+ * - 主 tab = #previewWebview（panel.html 静态存在）
+ * - target=_blank / window.open 由主进程 setWindowOpenHandler 拦截后，
+ *   通过 IPC 'app-open-tab' 通知本模块新建一个 <webview> 实例
  * - tabs.js 维护 tabId -> {webviewEl, title, url} 映射
- * - 切换 tab = display 切换 + 调 updateWebviewScale 重新计算当前 webview 缩放
+ * - 切换 tab = display 切换 + 重新计算当前 webview 缩放
  * - 关闭 tab = removeChild webview
- * - tab state 推送给 main.js（用 BVM 维护 activeTabId 用于录制 helper 注入）
+ *
+ * ★ 关键前提（2026-08-11 实测确认）：
+ *   <webview> 必须带**独立布尔属性** `allowpopups`，主进程的 setWindowOpenHandler 才会触发。
+ *   写成 webpreferences="allowpopups" 完全无效（Electron 内部是 disablePopups = !params.allowpopups，
+ *   webpreferences 字符串里的 allowpopups 不参与该判断），Chromium 会在渲染层直接吞掉弹窗请求，
+ *   应用层任何事件都收不到 —— 表现为"点击按钮没有任何反应"。
  */
 import { appState } from './state.js';
 import { api } from './api.js';
@@ -23,24 +29,23 @@ const tabs = new Map();
 /** 当前激活 tab id（初始为 'main'，对应 panel.html 的 #previewWebview） */
 let activeTabId = 'main';
 let ipcBound = false;
+/** 新 tab 请求去重（主进程 IPC 与兜底通道可能同时到达） */
+let lastOpenReq = { url: '', ts: 0 };
 
 function tabBarEl() { return document.getElementById('tabBar'); }
 function tabPagesEl() { return document.getElementById('tabPages'); }
 
-/** 初始化：订阅 main.js 推过来的 open-tab 事件 */
+/** 初始化：注册主 tab + 订阅 main.js 推过来的 open-tab 事件 */
 export function initTabs() {
-  logMain('[tabs] initTabs called, panel.html DOM ready=' + (!!document.getElementById('tabBar')));
+  logMain('[tabs] initTabs called, tabBar ready=' + (!!document.getElementById('tabBar')));
 
   // 主 tab 注册到 map（用 panel.html 已有的 previewWebview）
-  let mainWebview = document.getElementById('previewWebview');
-  let mainPage = mainWebview ? mainWebview.closest('.webview-tab-page') : null;
+  const mainWebview = document.getElementById('previewWebview');
+  const mainPage = mainWebview ? mainWebview.closest('.webview-tab-page') : null;
 
   if (!mainWebview || !mainPage) {
     logMain('[tabs] 主 webview 不在 DOM，DOMContentLoaded 后重试');
-    document.addEventListener('DOMContentLoaded', () => {
-      logMain('[tabs] DOMContentLoaded fired, retry init');
-      initTabs();
-    });
+    document.addEventListener('DOMContentLoaded', () => initTabs(), { once: true });
     return;
   }
 
@@ -51,50 +56,66 @@ export function initTabs() {
     webviewEl: mainWebview,
     pageEl: mainPage,
   });
-  logMain('[tabs] 主 tab 已注册（panel.html 静态）');
 
-  // ★ 监听 main.js 推送的 'app-open-tab' 事件（target=_blank 拦截后开新 tab）
+  // ★ 监听 main.js 推送的 'app-open-tab' 事件（target=_blank / window.open 拦截后开新 tab）
   if (!ipcBound && window.electronAPI && window.electronAPI.onAppOpenTab) {
     ipcBound = true;
-    window.electronAPI.onAppOpenTab(({ url, sourceWebviewId }) => {
+    window.electronAPI.onAppOpenTab((payload) => {
+      const url = payload && payload.url;
       logMain('[tabs] recv app-open-tab url=' + url);
-      openTab(url);
+      requestNewTab(url, 'window-open-handler');
     });
     logMain('[tabs] 已订阅 app-open-tab 事件');
   } else if (!window.electronAPI || !window.electronAPI.onAppOpenTab) {
-    logMain('[tabs] electronAPI.onAppOpenTab 不可用（主进程未注册？）');
+    logMain('[tabs] electronAPI.onAppOpenTab 不可用（preload 未暴露？）');
   }
 
-  // 监听 webview-new-window（兜底，BVM/old 模式兼容）
+  // 兜底通道：老的 webview-new-window IPC
   if (window.electronAPI && window.electronAPI.onWebviewNewWindow) {
-    window.electronAPI.onWebviewNewWindow(({ url }) => {
+    window.electronAPI.onWebviewNewWindow((payload) => {
+      const url = payload && payload.url;
       logMain('[tabs] recv webview-new-window url=' + url);
-      openTab(url);
+      requestNewTab(url, 'new-window-event');
     });
   }
 
   renderTabBar();
 }
 
-/** 打开新 tab（在 #tabPages 末尾追加 webview tag，激活它） */
-export function openTab(url) {
+/** 新 tab 请求入口（带 1s 同 URL 去重，合并多条通道） */
+export function requestNewTab(url, source) {
   if (!url) return null;
+  const now = Date.now();
+  if (url === lastOpenReq.url && now - lastOpenReq.ts < 1000) {
+    logMain('[tabs] 忽略重复新 tab 请求(' + source + ') url=' + url);
+    return null;
+  }
+  lastOpenReq = { url, ts: now };
+  return openTab(url);
+}
+
+/** 打开新 tab（在 #tabPages 末尾追加 webview tag，激活它） */
+export async function openTab(url) {
+  if (!url) return null;
+  const pagesEl = tabPagesEl();
+  if (!pagesEl) {
+    logMain('[tabs] openTab 失败：#tabPages 不存在');
+    return null;
+  }
+
   tabSeq += 1;
   const tabId = 'tab-' + tabSeq;
   const title = makeTabTitle(url);
 
-  // 创建 webview tab page（与 .webview-tab-page 同结构：scroll-wrapper + scale-wrapper + webview）
-  const pagesEl = tabPagesEl();
-  if (!pagesEl) return null;
-
+  // 结构与主 tab 保持一致：tab-page > scroll-wrapper > scale-wrapper > webview
   const pageEl = document.createElement('div');
   pageEl.className = 'webview-tab-page';
   pageEl.dataset.tabId = tabId;
-  pageEl.style.display = 'none'; // 先隐藏
 
   const scrollWrapper = document.createElement('div');
   scrollWrapper.className = 'webview-scroll-wrapper';
   scrollWrapper.id = 'webviewScrollWrapper-' + tabId;
+  if (appState.fitPageEnabled) scrollWrapper.classList.add('fit-mode');
 
   const scaleWrapper = document.createElement('div');
   scaleWrapper.className = 'webview-scale-wrapper';
@@ -103,10 +124,19 @@ export function openTab(url) {
   const wv = document.createElement('webview');
   wv.id = 'previewWebview-' + tabId;
   wv.className = 'preview-webview-inner';
-  wv.setAttribute('partition', 'persist:webview');
-  wv.setAttribute('webpreferences', 'allowpopups');
+  wv.setAttribute('partition', 'persist:webview'); // 与主 tab 共享 session（登录态延续）
+  // ★ 独立布尔属性，不能写进 webpreferences —— 否则新 tab 内再点 _blank 又会"没反应"
+  wv.setAttribute('allowpopups', '');
+
+  // ★ preload 必须在 appendChild（attach）之前设置，
+  //    attach 之后再改 preload/partition/src 会触发 ERR_ABORTED (-3) 并销毁 webContents
+  try {
+    const preloadUrl = await api.getWebviewPreloadPath();
+    if (preloadUrl) wv.setAttribute('preload', preloadUrl);
+  } catch (e) {
+    logMain('[tabs] 获取 webview preload 路径失败: ' + e.message);
+  }
   wv.setAttribute('src', url);
-  wv.style.display = 'flex';
 
   scaleWrapper.appendChild(wv);
   scrollWrapper.appendChild(scaleWrapper);
@@ -114,41 +144,88 @@ export function openTab(url) {
   pagesEl.appendChild(pageEl);
 
   tabs.set(tabId, { id: tabId, url, title, webviewEl: wv, pageEl });
-  activateTab(tabId);
+
+  // ★ 给新 tab 绑定录制事件桥接 + 加载事件（使新 tab 内也能拾取元素 / 录制 HTML）
+  bindTabWebview(wv, tabId);
+
+  await activateTab(tabId, { force: true });
   renderTabBar();
   logMain('[tabs] openTab ' + tabId + ' url=' + url);
-
-  // ★ 通知主进程（让 main.js 知道新 tab 存在，录制 helper 注入能正确路由）
-  try { if (api && api.notifyTabOpened) api.notifyTabOpened(tabId, url); } catch (e) { /* ignore */ }
   return tabId;
 }
 
-/** 切换到指定 tab（display 切换） */
-export async function activateTab(tabId) {
-  if (!tabs.has(tabId)) return;
-  if (tabId === activeTabId) return;
-
-  // 隐藏旧的
-  const prev = tabs.get(activeTabId);
-  if (prev && prev.pageEl) {
-    prev.pageEl.classList.remove('active');
-    prev.pageEl.style.display = 'none';
-  }
-  // 显示新的
-  const next = tabs.get(tabId);
-  if (next && next.pageEl) {
-    next.pageEl.classList.add('active');
-    next.pageEl.style.display = 'flex';
-  }
-  activeTabId = tabId;
-  if (window.appState) window.appState.activeAppTabId = tabId;
-  renderTabBar();
-  // ★ 重新计算缩放（确保切回主 tab 时缩放不丢）
+/** 给某个 tab 的 webview 绑定录制 IPC 桥接与加载事件 */
+async function bindTabWebview(wv, tabId) {
   try {
-    const mod = await import('./webview-controls.js');
-    mod.updateWebviewScale();
-  } catch (e) { /* ignore */ }
+    const rec = await import('../recording/internal/webview-recording.js');
+    // 录制事件（element-selected / login-form-detected 等）
+    rec.setupWebviewIpcListener(wv);
+
+    wv.addEventListener('did-finish-load', () => {
+      logMain('[tabs] ' + tabId + ' did-finish-load');
+      const loading = document.getElementById('previewLoading');
+      if (loading) loading.classList.remove('active');
+      // 导航后页面里的 helper 会失效，录制模式下重新注入
+      wv._recHelperInjected = false;
+      if (appState.webviewRecordingMode) {
+        rec.injectWebviewElementHelper(wv).catch(() => {});
+      }
+      updateActiveTabScale();
+    });
+
+    wv.addEventListener('did-start-loading', () => {
+      const loading = document.getElementById('previewLoading');
+      if (loading && activeTabId === tabId) {
+        loading.textContent = '加载中...';
+        loading.classList.add('active');
+      }
+    });
+    wv.addEventListener('did-stop-loading', () => {
+      const loading = document.getElementById('previewLoading');
+      if (loading) loading.classList.remove('active');
+    });
+    wv.addEventListener('did-fail-load', () => {
+      const loading = document.getElementById('previewLoading');
+      if (loading) loading.classList.remove('active');
+    });
+
+    // 页面标题就绪后更新 tab 名
+    wv.addEventListener('page-title-updated', (e) => {
+      const t = tabs.get(tabId);
+      if (t && e.title) {
+        t.title = e.title.length > 18 ? e.title.slice(0, 18) + '…' : e.title;
+        renderTabBar();
+      }
+    });
+  } catch (e) {
+    logMain('[tabs] bindTabWebview 失败: ' + e.message);
+  }
+}
+
+/** 切换到指定 tab（display 切换） */
+export async function activateTab(tabId, opts) {
+  if (!tabs.has(tabId)) return;
+  if (tabId === activeTabId && !(opts && opts.force)) return;
+
+  for (const [id, t] of tabs) {
+    if (!t.pageEl) continue;
+    const on = id === tabId;
+    t.pageEl.classList.toggle('active', on);
+    t.pageEl.style.display = on ? 'flex' : 'none';
+  }
+
+  activeTabId = tabId;
+  appState.activeAppTabId = tabId;
+  renderTabBar();
+  updateActiveTabScale();
   logMain('[tabs] activateTab ' + tabId);
+}
+
+/** 重新计算当前激活 tab 的缩放 */
+function updateActiveTabScale() {
+  import('./webview-controls.js')
+    .then((mod) => mod.updateWebviewScale())
+    .catch(() => {});
 }
 
 /** 关闭 tab */
@@ -156,54 +233,62 @@ export async function closeTab(tabId) {
   if (tabId === 'main') return; // 主 tab 不可关
   const t = tabs.get(tabId);
   if (!t) return;
-  // 移除 DOM
   if (t.pageEl && t.pageEl.parentNode) t.pageEl.parentNode.removeChild(t.pageEl);
-  // 销毁 webview
-  try {
-    if (t.webviewEl && typeof t.webviewEl.remove === 'function') t.webviewEl.remove();
-  } catch (e) { /* ignore */ }
   tabs.delete(tabId);
-  // 切换到主 tab
   if (activeTabId === tabId) {
-    await activateTab('main');
+    await activateTab('main', { force: true });
   }
   renderTabBar();
   logMain('[tabs] closeTab ' + tabId);
 }
 
-/** 渲染 tabBar UI — 即使 tabs Map 为空也显示"主页面"占位 */
+/** ★ 关闭除主 tab 外的所有 tab（重新导航 / 开启新录制时清场） */
+export async function closeExtraTabs() {
+  const ids = [];
+  for (const id of tabs.keys()) if (id !== 'main') ids.push(id);
+  for (const id of ids) {
+    const t = tabs.get(id);
+    if (t && t.pageEl && t.pageEl.parentNode) t.pageEl.parentNode.removeChild(t.pageEl);
+    tabs.delete(id);
+  }
+  if (ids.length) logMain('[tabs] closeExtraTabs 关闭 ' + ids.length + ' 个 tab');
+  await activateTab('main', { force: true });
+  renderTabBar();
+}
+
+/** 供其它模块（banner / layout）在恢复 webview 显示后重算 tabBar 显隐 */
+export function refreshTabBar() {
+  renderTabBar();
+}
+
+/** 渲染 tabBar UI —— 只有一个主 tab 时整条隐藏，保持原有界面观感 */
 function renderTabBar() {
   const bar = tabBarEl();
-  if (!bar) {
-    logMain('[tabs] renderTabBar: bar element not found, retrying...');
-    setTimeout(renderTabBar, 100);
+  if (!bar) return;
+
+  if (tabs.size <= 1) {
+    bar.style.display = 'none';
+    bar.innerHTML = '';
     return;
   }
+  bar.style.display = 'flex';
   bar.innerHTML = '';
-
-  // ★ 兜底：如果 tabs Map 为空，至少渲染一个"主页面"占位
-  if (tabs.size === 0) {
-    logMain('[tabs] renderTabBar: tabs Map 空，渲染占位');
-    bar.appendChild(makeTabEl({ id: 'main', title: '主页面', closable: false }));
-    return;
-  }
-
   for (const [id, t] of tabs) {
     bar.appendChild(makeTabEl({ id, title: t.title, closable: id !== 'main' }));
   }
-  logMain('[tabs] tabBar 已渲染 tabs=' + tabs.size + ' active=' + activeTabId);
 }
 
 function makeTabEl({ id, title, closable }) {
   const el = document.createElement('div');
   el.className = 'tab-item' + (id === activeTabId ? ' active' : '');
+  el.title = title;
   el.style.cssText = [
     'display:flex', 'align-items:center', 'gap:6px',
     'padding:4px 8px', 'border-radius:4px',
     'cursor:pointer', 'background:' + (id === activeTabId ? 'var(--accent-blue-bg, #e8f0fe)' : 'transparent'),
     'color:' + (id === activeTabId ? 'var(--accent-blue-light, #165dff)' : 'var(--text-secondary, #666)'),
     'font-size:12px', 'user-select:none',
-    'white-space:nowrap', 'max-width:160px',
+    'white-space:nowrap', 'max-width:160px', 'flex-shrink:0',
   ].join(';');
   const titleSpan = document.createElement('span');
   titleSpan.textContent = title;
@@ -229,14 +314,23 @@ function makeTabTitle(url) {
     const u = new URL(url);
     return u.hostname || url.substring(0, 30);
   } catch (e) {
-    return url.substring(0, 30);
+    return String(url).substring(0, 30);
   }
 }
 
-/** 暴露当前激活 webview（供 webview-recording.js 使用） */
+/** 暴露当前激活 webview（供录制模块使用；未初始化时回退到主 webview） */
 export function getActiveWebview() {
   const t = tabs.get(activeTabId);
-  return t ? t.webviewEl : null;
+  if (t && t.webviewEl) return t.webviewEl;
+  return document.getElementById('previewWebview');
+}
+
+/** 暴露当前激活 tab 的页面容器（供缩放计算使用） */
+export function getActiveTabPage() {
+  const t = tabs.get(activeTabId);
+  if (t && t.pageEl) return t.pageEl;
+  const wv = document.getElementById('previewWebview');
+  return wv ? wv.closest('.webview-tab-page') : null;
 }
 
 /** 暴露当前激活 tab id */

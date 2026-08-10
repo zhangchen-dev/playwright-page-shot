@@ -1,9 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><title>guest</title></head>
-<body>
-  <h3>这是 webview 内页面（模拟 UAT 首页）</h3>
-  <a id="lnk" href="https://xft2-web-home-uat.cmburl.cn/helpapp/#/help-main" target="_blank" rel="opener">帮助中心</a>
-  <button id="btn" onclick="window.open('https://xft2-web-home-uat.cmburl.cn/helpapp/#/help-main','_blank')">open via window.open</button>
+<body style="font-family:sans-serif;padding:20px">
+  <h3>guest page</h3>
+  <a id="lnk" href="/target-page.html" target="_blank" rel="opener">target=_blank relative</a>
+  <br><br>
+  <a id="lnk2" href="https://example.com/abs" target="_blank">target=_blank absolute</a>
+  <br><br>
+  <button id="btn" onclick="var w=window.open('https://example.com/winopen','_blank');console.log('[guest] window.open returned '+(w===null?'NULL':'OBJECT'))">window.open</button>
 </body>
 </html>

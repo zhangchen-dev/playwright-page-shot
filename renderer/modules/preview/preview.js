@@ -7,6 +7,7 @@ import { updateLayout, showRecordingBanner } from '../common/layout.js';
 import { hideBanner } from '../common/banner.js';
 import { applyFitPage, updateWebviewScale } from '../common/webview-controls.js';
 import { disableWebviewSelectionMode } from '../recording/internal/webview-recording.js';
+import { closeExtraTabs } from '../common/tabs.js';
 import { renderPreviewStepSelector } from './step-selector.js';
 
 /** 将本地文件路径转为 file:// URL */
@@ -58,6 +59,16 @@ export async function openPreview(filePath, htmlFiles, dirName) {
 
   // ★ 隐藏 Banner（向上滚动移除动画），露出下方 webview 预览页面
   hideBanner();
+
+  // ★ 清理录制期间可能打开的子 tab 并切回主 tab。
+  //   否则若录制中点击过 target=_blank，激活的还是子 tab，
+  //   右侧就会停留在录制页面而非预览内容（无论是否关闭过浏览器都应如此）。
+  //   主 tab 才是承载预览 HTML 的 #previewWebview。
+  try {
+    await closeExtraTabs();
+  } catch (e) {
+    console.warn('[preview] closeExtraTabs 失败（不阻断预览）:', e.message);
+  }
 
   updateLayout();
 

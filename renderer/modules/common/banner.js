@@ -18,10 +18,15 @@ let _rotateTimer = null;
 let _hideTimer = null;
 let _rendered = false;
 
-/** 恢复 webview 滚动容器显示（banner 在上层移除时露出 webview） */
+/** 恢复 webview 显示（banner 在上层移除时露出 webview） */
 function restoreWebview() {
+  // ★ 多 tab：整体显隐 #tabPages（覆盖所有 tab 的 webview），不再只管主 tab 的滚动容器
+  const pages = document.getElementById('tabPages');
+  if (pages) pages.style.display = '';
   const w = document.getElementById('webviewScrollWrapper');
   if (w) w.style.display = '';
+  // tabBar 显隐交回 tabs.js 决定（单 tab 时应保持隐藏）
+  import('./tabs.js').then((m) => m.refreshTabBar()).catch(() => {});
 }
 
 /** 渲染 Banner 轮播（仅构建一次 DOM） */
@@ -80,10 +85,14 @@ export function showBanner() {
 
   const banner = document.getElementById('bannerContainer');
   const webviewWrapper = document.getElementById('webviewScrollWrapper');
+  const tabPages = document.getElementById('tabPages');
+  const tabBar = document.getElementById('tabBar');
   const loading = document.getElementById('previewLoading');
   const toolbarActions = document.getElementById('rightToolbarActions');
 
   if (webviewWrapper) webviewWrapper.style.display = 'none';
+  if (tabPages) tabPages.style.display = 'none'; // ★ 连同其它 tab 的 webview 一起隐藏
+  if (tabBar) tabBar.style.display = 'none';
   if (loading) loading.style.display = 'none';
   if (toolbarActions) toolbarActions.style.display = 'none';
 

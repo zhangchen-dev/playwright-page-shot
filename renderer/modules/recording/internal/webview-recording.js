@@ -12,6 +12,17 @@ import { updateMarkUI } from '../shared/recording-actions.js';
 import { showSavePasswordDialog } from '../shared/credentials-ui.js';
 import { hideBanner } from '../../common/banner.js';
 import { rerenderPanel } from '../../app.js';
+import { getActiveWebview, closeExtraTabs } from '../../common/tabs.js';
+
+/**
+ * ★ 取当前正在录制/浏览的 webview
+ * 只有一个主 tab 时返回的就是 #previewWebview（与改造前完全一致）；
+ * 用户点 target=_blank 开出新 tab 后，返回新 tab 的 webview，
+ * 从而实现"新 tab 里同样能拾取元素、录制 HTML"。
+ */
+function recWebview() {
+  return getActiveWebview() || document.getElementById('previewWebview');
+}
 
 /** 在右侧栏 webview 中打开 URL */
 export async function navigateInAppBrowser(url) {
@@ -32,7 +43,12 @@ export async function navigateInAppBrowser(url) {
   const rightTitle = document.getElementById('rightTitle');
   if (rightTitle) rightTitle.textContent = '应用内浏览器';
 
-  // 加载 URL
+  // ★ 从地址栏重新导航 = 新一轮录制，先回到主 tab 并清掉上一轮遗留的新 tab
+  try {
+    await closeExtraTabs();
+  } catch (e) { /* ignore */ }
+
+  // 加载 URL（地址栏导航固定落在主 tab）
   const webview = document.getElementById('previewWebview');
   const loading = document.getElementById('previewLoading');
   if (loading) {
@@ -83,9 +99,9 @@ export async function navigateInAppBrowser(url) {
   updateStatus('应用内浏览器: ' + url, 'var(--accent-blue)');
 }
 
-/** 注入元素选择 + 凭证辅助脚本到 webview */
-export async function injectWebviewElementHelper() {
-  const webview = document.getElementById('previewWebview');
+/** 注入元素选择 + 凭证辅助脚本到 webview（不传参 = 当前激活 tab） */
+export async function injectWebviewElementHelper(targetWebview) {
+  const webview = targetWebview || recWebview();
   if (!webview) return;
 
   // ★ 同时获取元素选择脚本 + 凭证辅助脚本
@@ -126,8 +142,10 @@ export async function injectWebviewElementHelper() {
   ].join('\n');
 
   await webview.executeJavaScript(wrapperCode);
+  // ★ 逐 webview 记录注入状态（多 tab 下每个 webview 各自注入一次）
+  webview._recHelperInjected = true;
   appState.webviewHelperInjected = true;
-  console.log('[panel] 元素选择 + 凭证辅助脚本已注入 webview');
+  console.log('[panel] 元素选择 + 凭证辅助脚本已注入 webview:', webview.id);
 }
 
 /**
@@ -135,8 +153,8 @@ export async function injectWebviewElementHelper() {
  * 使用 ipcRenderer.sendToHost → webview 'ipc-message' 事件通信，
  * 替代之前不可靠的 console-message 方案。
  */
-export function setupWebviewIpcListener() {
-  const webview = document.getElementById('previewWebview');
+export function setupWebviewIpcListener(targetWebview) {
+  const webview = targetWebview || document.getElementById('previewWebview');
   if (!webview || webview._recIpcBound) return;
   webview._recIpcBound = true;
 
@@ -148,8 +166,8 @@ export function setupWebviewIpcListener() {
       appState.hasSelectedElement = true;
       appState.selectedElementData = data;
       appState.isSelectingMode = false;
-      // ★ 禁用 webview 选择模式（确保页面恢复正常可交互状态）
-      disableWebviewSelectionMode();
+      // ★ 禁用发出事件的那个 webview 的选择模式（多 tab 下要精确到来源 webview）
+      disableWebviewSelectionMode(webview);
       // ★ 自动填充主标题（如果为空）
       const mtInput = document.getElementById('markMainTitleInput');
       if (mtInput && !mtInput.value && data.text) mtInput.value = data.text;
@@ -160,7 +178,7 @@ export function setupWebviewIpcListener() {
       appState.selectedElementData = null;
       appState.isSelectingMode = false;
       // ★ 禁用 webview 选择模式
-      disableWebviewSelectionMode();
+      disableWebviewSelectionMode(webview);
       updateMarkUI();
       updateStatus('', '');
     } else if (channel === 'login-form-detected') {
@@ -173,29 +191,26 @@ export function setupWebviewIpcListener() {
     } else if (channel === 'login-submit') {
       // ★ 捕获到登录提交 — 弹出保存密码对话框
       showSavePasswordDialog(data.domain, data.username, data.password);
-    } else if (channel === 'webview-navigate') {
-      // ★ 新窗口导航拦截 — webview 内的 window.open / target="_blank" 被拦截后，
-      //    通过 __recSendToHost 通知宿主页面在当前 webview 中导航
+    } else if (channel === 'webview-navigate' || channel === 'rec-new-tab') {
+      // ★ 页面内脚本兜底通道：请求打开新地址 → 统一开新 tab（不再覆盖当前页面）
       const newUrl = data && data.url;
       if (newUrl) {
-        try {
-          webview.loadURL(newUrl);
-          console.log('[panel] webview-navigate 已在当前 webview 中导航: ' + newUrl);
-        } catch (err) {
-          console.error('[panel] webview-navigate 导航失败:', err);
-        }
+        import('../../common/tabs.js')
+          .then((m) => m.requestNewTab(newUrl, channel))
+          .catch((err) => console.error('[panel] ' + channel + ' 开新 tab 失败:', err));
       }
     }
   });
 }
 
-/** 在 webview 中启用元素选择模式 */
+/** 在 webview 中启用元素选择模式（作用于当前激活 tab） */
 export async function enableWebviewSelectionMode() {
-  const webview = document.getElementById('previewWebview');
+  const webview = recWebview();
   if (!webview) return;
 
-  if (!appState.webviewHelperInjected) {
-    await injectWebviewElementHelper();
+  // ★ 逐 webview 判断是否已注入（新 tab 首次拾取时也能自动补注入）
+  if (!webview._recHelperInjected) {
+    await injectWebviewElementHelper(webview);
   }
 
   try {
@@ -206,8 +221,8 @@ export async function enableWebviewSelectionMode() {
 }
 
 /** 在 webview 中禁用元素选择模式 */
-export async function disableWebviewSelectionMode() {
-  const webview = document.getElementById('previewWebview');
+export async function disableWebviewSelectionMode(targetWebview) {
+  const webview = targetWebview || recWebview();
   if (!webview) return;
   try {
     await webview.executeJavaScript('window.__recHelper && window.__recHelper.disableSelectionMode()');
@@ -218,7 +233,7 @@ export async function disableWebviewSelectionMode() {
 
 /** 在 webview 中移除元素 ID */
 export async function removeWebviewElementId(elementId) {
-  const webview = document.getElementById('previewWebview');
+  const webview = recWebview();
   if (!webview) return;
   try {
     await webview.executeJavaScript(
@@ -231,7 +246,7 @@ export async function removeWebviewElementId(elementId) {
 
 /** ★ 在 webview 中填充登录凭证 */
 export async function fillWebviewCredentials(username, password) {
-  const webview = document.getElementById('previewWebview');
+  const webview = recWebview();
   if (!webview) return false;
   try {
     const result = await webview.executeJavaScript(
@@ -247,7 +262,8 @@ export async function fillWebviewCredentials(username, password) {
 
 /** ★ 捕获 webview 页面数据（用于录制快照） */
 export async function captureWebviewData() {
-  const webview = document.getElementById('previewWebview');
+  // ★ 捕获当前激活 tab 的页面（新 tab 内录制 HTML 依赖这里）
+  const webview = recWebview();
   if (!webview) return null;
 
   // ★ P0 防御：浏览器未启动时直接返回，避免在未初始化的 webview 上 executeJavaScript 永久挂起

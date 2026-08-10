@@ -103,7 +103,11 @@
           <div class="webview-tab-page active" data-tab-id="main">
             <div class="webview-scroll-wrapper" id="webviewScrollWrapper">
               <div class="webview-scale-wrapper" id="webviewScaleWrapper">
-                <webview id="previewWebview" class="preview-webview-inner" partition="persist:webview" webpreferences="allowpopups"></webview>
+                <!-- ★ allowpopups 必须是独立布尔属性（Electron: disablePopups = !allowpopups）。
+                     写成 webpreferences="allowpopups" 无效 —— Chromium 会在渲染层直接吞掉
+                     target=_blank / window.open，主进程 setWindowOpenHandler 永远不触发，
+                     表现就是"点击没反应"。 -->
+                <webview id="previewWebview" class="preview-webview-inner" partition="persist:webview" allowpopups></webview>
               </div>
             </div>
           </div>

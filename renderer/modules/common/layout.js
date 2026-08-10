@@ -108,10 +108,13 @@ function setRightTitle(text) {
   if (el) el.textContent = text;
 }
 
-/** ★ 恢复 webview 滚动容器显示 */
+/** ★ 恢复 webview 显示（多 tab：整体恢复 #tabPages） */
 function restoreWebview() {
+  const pages = document.getElementById('tabPages');
+  if (pages) pages.style.display = '';
   const w = document.getElementById('webviewScrollWrapper');
   if (w) w.style.display = '';
+  import('./tabs.js').then((m) => m.refreshTabBar()).catch(() => {});
 }
 
 /**

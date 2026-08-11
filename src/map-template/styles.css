@@ -1,0 +1,979 @@
+/**
+ * DemoDetail 静态页面样式
+ * 基于真实页面样式转换
+ */
+
+/* ==================== 变量定义 ==================== */
+:root {
+  --color-text-neutral-gray50: #132240;
+  --color-text-neutral-gray40: rgba(19, 34, 64, 0.65);
+  --color-text-neutral-gray30: rgba(19, 34, 64, 0.45);
+  --color-text-neutral-gray10: rgba(19, 34, 64, 0.25);
+  --color-bg-accent-regular: #196fff;
+  --color-border-accent-regular: #196fff;
+  --color-divider-neutral: rgba(19, 34, 64, 0.1);
+}
+
+ul li {
+  list-style: none;
+}
+
+/* ==================== 页面主体结构 ==================== */
+.pageBody {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  display: flex;
+}
+
+/* 页面区域 */
+.iframeContainer {
+  flex: 1;
+  position: relative;
+  box-sizing: border-box;
+  background-color: #fff;
+  overflow: hidden;
+}
+
+.iframeContent {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.iframeContentBg {
+  display: none;
+}
+
+.iframeContent > iframe {
+  border: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.loaddingContainer {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: none;
+}
+
+/* 地图容器 */
+.mapContainer {
+  width: 400px;
+  height: 100%;
+  background: url('./img/step_map_bg.png') #fff no-repeat center center;
+  background-size: cover;
+  box-sizing: border-box;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  z-index: 30;
+  transition: width 0.3s ease;
+  overflow: hidden;
+}
+
+/* 加载状态 */
+.loaddingBody .iframeContainer .loaddingContainer {
+  display: inline-block;
+}
+
+.loaddingBody .iframeContainer .iframeContent {
+  visibility: hidden;
+}
+
+/* 显示蒙层 */
+.showMask .iframeContainer::before {
+  content: '';
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  z-index: 1;
+}
+
+/* 收起地图 */
+.mapClose .mapContainer {
+  width: 0;
+  padding: 0;
+}
+
+/* 地图收起时的浮动按钮 */
+.mapClose .floatBtn {
+  display: block !important;
+}
+
+/* 浮动按钮样式 */
+.floatBtn {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  padding: 12px 24px;
+  background: linear-gradient(132deg, #7684ff 2%, #4319ff 100%);
+  box-shadow: 0 8px 24px 0 #c9bbff;
+  border-radius: 22px;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  z-index: 100;
+}
+
+.floatBtn:hover {
+  box-shadow: 0 12px 32px 0 #b8aaff;
+}
+
+/* ==================== 顶部导航栏 ==================== */
+.topbarContainer {
+  position: absolute;
+  z-index: 30;
+  top: 12px;
+  left: 50%;
+  box-sizing: border-box;
+  width: calc(100% - 64px);
+  height: 52px;
+  transform: translateX(-50%);
+  max-width: 906px;
+  display: flex;
+  font-size: 16px;
+  line-height: 1;
+  color: #132240;
+  cursor: move;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.titleDiv {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  background: url('./img/top_bar_bg.png') no-repeat center center;
+  background-size: 100% 100%;
+  box-shadow: 0px 15px 40px 0px rgba(0, 26, 97, 0.13);
+  border-radius: 26px;
+  padding: 0 24px;
+  overflow: hidden;
+}
+
+.titleDiv .topbarTitle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  margin: 0 8px;
+  line-height: 22px;
+}
+
+.titleDiv .titleItem {
+  display: flex;
+  align-items: center;
+}
+
+.titleDiv .topbarSpan {
+  font-weight: 600;
+}
+
+.titleDiv .lastDetailName {
+  min-width: 140px;
+  max-width: 380px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.titleDiv .topbarBtn {
+  width: 80px;
+  height: 30px;
+  margin-left: 24px;
+  line-height: 30px;
+  text-align: center;
+  background: rgba(255, 253, 253, 0.5);
+  border-radius: 15px;
+  border: 1px solid #fff;
+  font-size: 14px;
+  color: rgba(19, 34, 64, 0.65);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.titleDiv .topbarBtn:hover {
+  background: rgba(255, 253, 253, 0.8);
+}
+
+.titleItem svg {
+  width: 16px;
+  height: 16px;
+  margin: 0 8px;
+  fill: currentColor;
+}
+
+/* ==================== 演示地图 ==================== */
+/* 关闭按钮 */
+.mapContainer .closeSpan {
+  font-size: 14px;
+  color: rgba(19, 34, 64, 0.45);
+  position: absolute;
+  right: 20px;
+  top: 20px;
+  margin-left: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.mapContainer .closeSpan::before {
+  content: '';
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background: url('./img/icon_close.png') no-repeat center center;
+  margin-right: 4px;
+}
+
+/* 副标题 */
+.mapContainer .mapSubTitle {
+  font-size: 16px;
+  font-style: italic;
+  color: rgba(19, 34, 64, 0.45);
+  font-weight: 700;
+  margin: 20px 20px 0 20px;
+}
+
+/* 主标题 */
+.mapContainer .mapTitle {
+  color: #132240;
+  font-weight: 700;
+  margin: 0 20px;
+  max-width: 78%;
+}
+
+.mapContainer .longTitle {
+  font-size: 20px;
+}
+
+.mapContainer .normalTitle {
+  font-size: 24px;
+}
+
+/* 卡片容器 */
+.mapContainer .cardContainer {
+  flex: 1;
+  overflow: auto;
+  margin: 0 0 16px 20px;
+  padding-right: 20px;
+}
+
+/* 模块卡片 */
+.mapContainer .card {
+  margin-top: 38px;
+  position: relative;
+  background: linear-gradient(141deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.9) 100%);
+  border-radius: 8px;
+  padding: 22px 16px 20px 16px;
+}
+
+.mapContainer .cardTitle {
+  position: absolute;
+  top: -15px;
+  left: 0;
+  height: 31px;
+  display: flex;
+  align-items: center;
+  background: url('./img/card_title_bg.png') no-repeat center center;
+  border-radius: 8px 20px 20px 0;
+  padding: 0 8px 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1d2076;
+  cursor: pointer;
+  line-height: 1;
+  max-width: calc(100% - 16px);
+}
+
+.mapContainer .cardLeftIcon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  margin-right: 4px;
+  background: url('./img/icon_model_1.png') no-repeat center center;
+  background-size: 100% 100%;
+}
+
+.mapContainer .cardLeftIcon.enIcon {
+  background: url('./img/icon_model_2.png') no-repeat center center;
+  background-size: 100% 100%;
+}
+
+.mapContainer .cardRightIcon {
+  margin-left: 4px;
+  font-size: 12px;
+}
+
+.mapContainer .cardTitleText {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mapContainer .cardDesc {
+  font-size: 12px;
+  color: rgba(19, 34, 64, 0.65);
+}
+
+/* 步骤列表 */
+.mapContainer .cardUl {
+  margin-top: 16px;
+  padding: 16px;
+  background: #fff;
+  border-radius: 6px;
+  display: none;
+}
+
+.mapContainer .cardUl > li {
+  margin-top: 8px;
+  font-size: 14px;
+  position: relative;
+}
+
+.mapContainer .cardUl > li::before {
+  content: '';
+  display: block;
+  position: absolute;
+  left: 12px;
+  top: 20px;
+  width: 2px;
+  height: calc(100% - 5px);
+  border-left: 1px dotted #196fff;
+}
+
+.mapContainer .cardUl > li:first-child {
+  margin-top: 0;
+}
+
+.mapContainer .cardUl > li:last-child::before {
+  display: none;
+}
+
+.mapContainer .stepNameContainer {
+  height: 31px;
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.mapContainer .stepIcon {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  margin: 0 4px;
+  color: #196fff;
+  background-color: #d4e5ff;
+  border-radius: 50%;
+  position: relative;
+  font-size: 12px;
+}
+
+.mapContainer .stepName {
+  padding-left: 8px;
+  color: #132240;
+  border-radius: 6px 6px 6px 6px;
+  flex: 1;
+  height: 31px;
+  line-height: 31px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mapContainer .currentTag {
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 0 4px 0 4px;
+  color: #fff;
+  background-color: #196fff;
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 12px;
+  line-height: 16px;
+  font-style: italic;
+  display: none;
+}
+
+.mapContainer .stepDesc {
+  margin-left: 32px;
+  color: rgba(19, 34, 64, 0.65);
+  font-size: 12px;
+  display: none;
+}
+
+/* 当前步骤 */
+.mapContainer .cardUl > li.active .stepNameContainer::before {
+  content: '';
+  width: 9px;
+  height: 12px;
+  display: block;
+  position: absolute;
+  left: -12px;
+  top: 9px;
+  background: url('./img/icon_current.png') no-repeat center center;
+}
+
+.mapContainer .cardUl > li.active .stepIcon {
+  color: #fff;
+  background-color: #196fff;
+}
+
+.mapContainer .cardUl > li.active .stepName {
+  color: #196fff;
+  background: linear-gradient(270deg, #ddebff 1%, rgba(235, 243, 255, 0) 100%);
+  padding-right: 44px;
+}
+
+.mapContainer .cardUl > li.active .currentTag {
+  display: inline-block;
+}
+
+/* 已完成步骤 */
+.mapContainer .cardUl > li.over .stepIcon {
+  color: transparent;
+  background: url('./img/icon_step_over.png') no-repeat center center;
+  background-size: 100% 100%;
+}
+
+.mapContainer .cardUl > li.allowClick {
+  cursor: pointer;
+}
+
+/* 展开状态 */
+.mapContainer .card.cardOpen .cardUl {
+  display: block;
+}
+
+/* 底部按钮 */
+.mapContainer .mapFooter {
+  padding: 16px 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.33) 0%, #ffffff 100%);
+}
+
+.mapContainer .startBtn {
+  position: relative;
+  height: 44px;
+  line-height: 44px;
+  margin-bottom: 16px;
+  cursor: pointer;
+  background: url('./img/start_btn.png') no-repeat center center;
+  background-size: auto 100%;
+  border-radius: 22px;
+  text-align: center;
+}
+
+.mapContainer .startBtn > span {
+  display: none;
+}
+
+.mapContainer .btnContainer {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  color: #1921ff;
+  font-size: 14px;
+  position: relative;
+}
+
+.mapContainer .btnContainer::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  display: block;
+  width: 1px;
+  height: 16px;
+  background: rgba(19, 34, 64, 0.1);
+}
+
+.mapContainer .btnContainer > span {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+}
+
+.mapContainer .btnContainer > span::before {
+  content: '';
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background: url('./img/icon_btn2.svg') no-repeat center center;
+  margin-right: 4px;
+}
+
+.mapContainer .btnContainer > span:nth-child(2)::before {
+  background-image: url('./img/icon_btn1.svg');
+}
+
+.mapContainer .btnContainer > span.btnDisabled {
+  color: rgba(19, 34, 64, 0.25);
+  cursor: not-allowed;
+}
+
+.mapContainer .btnContainer > span.btnDisabled::before {
+  background-image: url('./img/icon_btn2_disabled.svg');
+}
+
+.mapContainer .btnContainer > span:nth-child(2).btnDisabled::before {
+  background-image: url('./img/icon_btn1_disabled.svg');
+}
+
+/* 进行中底部工具条（globalTool） */
+.mapContainer .globalTool {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.mapContainer .globalTool .gtBtn {
+  cursor: pointer;
+  min-width: 84px;
+  height: 32px;
+  line-height: 32px;
+  text-align: center;
+  border-radius: 16px;
+  font-size: 14px;
+  padding: 0 16px;
+  color: #fff;
+  background: linear-gradient(135deg, #4a90e2, #357abd);
+  box-shadow: 0 4px 12px rgba(53, 122, 189, 0.35);
+}
+
+.mapContainer .globalTool .gtBtn.gtRestart {
+  color: #357abd;
+  background: #fff;
+  border: 1px solid rgba(53, 122, 189, 0.4);
+  box-shadow: none;
+}
+
+/* 地图开关按钮（mapToggleBtn） */
+.mapToggleBtn {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 30;
+  cursor: pointer;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  color: #fff;
+  background: rgba(53, 122, 189, 0.9);
+}
+
+/* ==================== 手指气泡动画 ==================== */
+.tourGuidePoint {
+  pointer-events: none;
+  width: 65px;
+  height: 65px;
+  position: absolute;
+  right: 30px;
+  top: -10px;
+}
+
+.tourGuidePointCircle {
+  position: absolute;
+  top: 21px;
+  left: 21px;
+  width: 22px;
+  height: 22px;
+  background-color: rgba(255, 172, 77, 0.55);
+  border-radius: 50%;
+}
+
+.tourGuidePointCircle::before,
+.tourGuidePointCircle::after {
+  position: absolute;
+  top: -11px;
+  left: -11px;
+  width: 44px;
+  height: 44px;
+  background-color: #ffac4d;
+  border-radius: 50%;
+  opacity: 0.55;
+  animation: xftautouseplugin-pointframe1 2s linear infinite;
+  content: '';
+}
+
+.tourGuidePointCircle::after {
+  top: -22px;
+  left: -22px;
+  width: 66px;
+  height: 66px;
+  opacity: 0.3;
+  animation: xftautouseplugin-pointframe2 2s linear infinite;
+}
+
+.tourGuidePointIcon {
+  position: absolute;
+  top: 28px;
+  left: 23px;
+  width: 37px;
+  height: 43px;
+  background: url('./img/tour-point.png') transparent no-repeat center center;
+}
+
+@keyframes xftautouseplugin-pointframe1 {
+  0% {
+    top: 0;
+    left: 0;
+    width: 22px;
+    height: 22px;
+    opacity: 0.55;
+  }
+  100% {
+    top: -11px;
+    left: -11px;
+    width: 44px;
+    height: 44px;
+    opacity: 0.3;
+  }
+}
+
+@keyframes xftautouseplugin-pointframe2 {
+  0% {
+    top: -11px;
+    left: -11px;
+    width: 44px;
+    height: 44px;
+    opacity: 0.3;
+  }
+  100% {
+    top: -22px;
+    left: -22px;
+    width: 66px;
+    height: 66px;
+    opacity: 0;
+  }
+}
+
+/* ==================== 场景故事浮动提示框 ==================== */
+.stepTipContainer {
+  position: absolute;
+  z-index: 31;
+  bottom: 48px;
+  left: 420px;
+  display: flex;
+  align-items: flex-end;
+  width: 388px;
+}
+
+.stepTipContainer .tipsTextBox {
+  flex: 1;
+  min-height: 171px;
+  background: linear-gradient(135deg, rgba(229, 247, 255, 0.8) 0%, rgba(216, 229, 255, 0.8) 100%);
+  box-shadow: 0px 9px 24px 0px rgba(0, 26, 97, 0.13);
+  border-radius: 7px;
+  padding: 14px;
+  font-size: 14px;
+  line-height: 1.6;
+  position: relative;
+}
+
+.stepTipContainer .tipsTextBox::before {
+  content: '';
+  display: block;
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  background: #fff;
+  border-radius: 5px;
+  z-index: 1;
+}
+
+.stepTipContainer .tipsTextCloseIcon {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  cursor: pointer;
+  z-index: 2;
+  font-size: 16px;
+  color: rgba(19, 34, 64, 0.45);
+}
+
+.stepTipContainer .tipsTextQs {
+  font-weight: 600;
+  color: #132240;
+  margin-right: 20px;
+  position: relative;
+  z-index: 2;
+}
+
+.stepTipContainer .tipsTextAs {
+  margin-top: 8px;
+  color: rgba(19, 34, 64, 0.65);
+  position: relative;
+  z-index: 2;
+}
+
+.stepTipContainer::after {
+  content: '';
+  display: block;
+  width: 125px;
+  height: 171px;
+  margin-left: 9px;
+  margin-bottom: 6px;
+  background: url('./img/persion1.png') transparent no-repeat center center;
+  cursor: move;
+}
+
+.stepTipContainer.stepTipHide {
+  display: none !important;
+}
+
+/* ==================== 全局工具栏 ==================== */
+.toolContainer {
+  background: linear-gradient(135deg, #d5e1f7 0%, #e2f1fa 100%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  z-index: 1050;
+  max-width: 616px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  box-shadow: 0px 15px 40px 0px rgba(0, 26, 97, 0.13);
+  border-radius: 12px;
+  position: fixed;
+  cursor: move;
+  user-select: none;
+  bottom: 84px;
+  gap: 8px;
+  padding: 4px 20px 4px 4px;
+  font-size: 14px;
+}
+
+.toolContainer .dragIcon {
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+}
+
+.toolContainer .globalIcon {
+  width: 40px;
+  height: 40px;
+  pointer-events: none;
+  margin-right: 8px;
+}
+
+.toolContainer .operateBtn {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+}
+
+.toolContainer .operateBtn:hover {
+  color: #196fff;
+}
+
+.toolContainer .globalNextBtn {
+  margin-left: 8px;
+}
+
+.toolContainer .globalNextIcon {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(146deg, #93f1ff 0%, #31a2ff 31%, #1a56fc 71%, #6d7cff 84%, #a7a3fd 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toolContainer .globalNextIcon img {
+  width: 14px;
+  height: 14px;
+}
+
+.toolContainer .changePositionBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 30px;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+/* ==================== 完成弹窗 ==================== */
+.transitionContainer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: url('./img/scene_finish.png') #fff no-repeat center -71px;
+  background-size: 1280px 760px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.transitionCard {
+  min-width: 500px;
+  border-radius: 12px;
+  box-shadow: 0 9px 28px 0 rgba(0, 67, 182, 0.14);
+  background-color: #fff;
+  overflow: hidden;
+}
+
+.transitionCard > img {
+  width: 100%;
+  max-height: 300px;
+  object-fit: cover;
+}
+
+.transitionCard .footerDiv {
+  margin: 0 auto;
+  padding: 40px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  row-gap: 16px;
+  width: 300px;
+}
+
+.transitionCard .linkStyle {
+  flex: 1;
+  text-align: center;
+  height: 34px;
+  line-height: 40px;
+  background-color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  color: #196fff;
+}
+
+.transitionCard .primaryBtn {
+  color: #fff;
+  flex: 1;
+  text-align: center;
+  height: 40px;
+  line-height: 40px;
+  border: 1px solid rgba(19, 34, 64, 0.1);
+  font-size: 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: #196fff;
+  border-color: #196fff;
+  transition: all 0.2s;
+}
+
+.transitionCard .primaryBtn:hover {
+  background-color: #0056e6;
+}
+
+/* ==================== 加载动画 ==================== */
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(25, 111, 255, 0.2);
+  border-top-color: #196fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ==================== 小屏幕适配 ==================== */
+@media (max-width: 1440px) {
+  .mapContainer {
+    width: 260px;
+  }
+
+  .mapContainer .closeSpan {
+    font-size: 12px;
+  }
+
+  .mapContainer .mapSubTitle {
+    font-size: 14px;
+    margin: 16px 16px 4px 16px;
+  }
+
+  .mapContainer .mapTitle {
+    margin: 0 54px 0 16px;
+  }
+
+  .mapContainer .longTitle {
+    font-size: 16px;
+  }
+
+  .mapContainer .normalTitle {
+    font-size: 20px;
+  }
+
+  .mapContainer .cardContainer {
+    margin: 0 0 16px 16px;
+    padding-right: 16px;
+  }
+
+  .mapContainer .card {
+    margin-top: 34px;
+    padding: 22px 16px 16px 16px;
+  }
+
+  .mapContainer .cardTitle {
+    top: -14px;
+    height: 28px;
+    font-size: 12px;
+  }
+
+  .mapContainer .cardUl {
+    margin-top: 12px;
+    padding: 8px 12px;
+  }
+
+  .mapContainer .cardUl > li {
+    font-size: 12px;
+  }
+
+  .mapContainer .mapFooter {
+    padding: 16px;
+  }
+
+  .mapContainer .startBtn {
+    margin-bottom: 8px;
+  }
+
+  .pageBody .stepTipContainer {
+    left: 280px;
+    bottom: 16px;
+    width: 299px;
+  }
+
+  .pageBody .stepTipContainer::after {
+    width: 75px;
+    height: 102px;
+    margin-left: 0;
+    background-size: 100%;
+  }
+
+  .mapClose .stepTipContainer {
+    display: none;
+  }
+}

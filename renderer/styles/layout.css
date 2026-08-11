@@ -201,6 +201,82 @@
   -webkit-app-region: no-drag;
 }
 
+/* ★ 收起/展开控件按钮（始终可见，用于切换预览控件显隐） */
+.collapse-controls-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+.collapse-controls-btn:hover {
+  border-color: var(--border-accent);
+  color: var(--accent-blue);
+}
+#rightColumn.controls-collapsed .collapse-controls-btn {
+  background: var(--accent-blue);
+  color: #ffffff;
+  border-color: var(--accent-blue);
+  font-weight: 600;
+}
+
+/* ★ 收起态：隐藏标题、操作组、关闭按钮、收起按钮、步骤选择/重录行，仅留预览 + 应用壳子 */
+#rightColumn.controls-collapsed .right-title,
+#rightColumn.controls-collapsed .right-toolbar-actions,
+#rightColumn.controls-collapsed #closeRightBtn,
+#rightColumn.controls-collapsed .collapse-controls-btn,
+#rightColumn.controls-collapsed .preview-step-selector {
+  display: none !important;
+}
+#rightColumn.controls-collapsed .right-toolbar {
+  height: 0;
+  padding: 0;
+  border-bottom: none;
+  background: transparent;
+  -webkit-app-region: no-drag;
+  overflow: visible;
+}
+
+/* ★ 悬浮展开按钮：收起态下鼠标移至预览区顶部时出现 */
+.preview-floating-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  padding-top: 10px;
+  z-index: 40;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+#rightColumn.controls-collapsed .preview-container:hover .preview-floating-bar {
+  opacity: 1;
+  transform: translateY(0);
+}
+.preview-expand-btn {
+  pointer-events: auto;
+  padding: 5px 16px;
+  font-size: 12px;
+  background: rgba(33, 118, 255, 0.92);
+  color: #ffffff;
+  border: none;
+  border-radius: 0 0 12px 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  -webkit-app-region: no-drag;
+}
+.preview-expand-btn:hover {
+  background: rgba(33, 118, 255, 1);
+}
+
 .fit-page-btn {
   padding: 4px 10px;
   font-size: 11px;

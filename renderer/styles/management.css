@@ -179,9 +179,31 @@
 
 .scenario-card-actions {
   display: flex;
-  gap: 6px;
+  gap: 10px;
   flex-wrap: wrap;
   margin-top: 10px;
+  align-items: center;
+}
+
+/* ★ 按功能分组的操作按钮：用细分隔线区隔「预览 / 录制 / 分发 / 删除」 */
+.scenario-card-actions .action-group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.scenario-card-actions .action-group:not(:last-child)::after {
+  content: "";
+  width: 1px;
+  height: 18px;
+  background: var(--border-subtle);
+  margin: 0 2px;
+}
+.scenario-card-actions .action-group.danger {
+  margin-left: auto;
+}
+.scenario-card-actions .action-group.danger::after {
+  display: none;
 }
 
 .scenario-action-btn {

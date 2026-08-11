@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>演示中心 - 薪福通薪资管理演示</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- 页面主体 -->
+    <div id="pageBody" class="pageBody showMask">
+      <!-- 页面区域 -->
+      <div class="iframeContainer">
+        <!-- 横幅主题 -->
+        <div id="topNav" class="topbarContainer">
+          <div class="titleDiv">
+            <span class="topbarTitle">
+              <span>薪福通</span>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+              >
+                <path
+                  d="M6 4l4 4-4 4"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  fill="none"
+                />
+              </svg>
+              <span>薪资管理</span>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+              >
+                <path
+                  d="M6 4l4 4-4 4"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  fill="none"
+                />
+              </svg>
+              <span class="topbarSpan lastDetailName">月度薪资发放</span>
+            </span>
+            <span class="topbarBtn" onclick="DemoApp.exitDemoGuide()"
+              >退出演示</span
+            >
+          </div>
+        </div>
+
+        <!-- iframe页面 -->
+        <div class="iframeContent">
+          <iframe
+            id="demoIframe"
+            name="demo_iframe"
+            title="演示中心-演示主题"
+            src="about:blank"
+          ></iframe>
+        </div>
+
+        <!-- 加载中 -->
+        <div class="loaddingContainer">
+          <div class="loading-spinner"></div>
+        </div>
+      </div>
+
+      <!-- 步骤地图 -->
+      <div id="demoMap" class="mapContainer">
+        <div class="mapSubTitle" id="mapSubTitle">企业薪资管理解决方案</div>
+        <div class="mapTitle normalTitle" id="mapTitle">薪福通薪资管理演示</div>
+
+        <!-- 模块卡片容器 -->
+        <div class="cardContainer" id="cardContainer">
+          <!-- 模块卡片将通过 JS 动态生成 -->
+        </div>
+
+        <!-- 底部按钮 -->
+        <div class="mapFooter">
+          <div id="startBtn" class="startBtn" onclick="DemoApp.startDemo()">
+            <span>开始演示</span>
+            <div class="tourGuidePoint">
+              <div class="tourGuidePointCircle"></div>
+              <div class="tourGuidePointIcon"></div>
+            </div>
+          </div>
+
+          <!-- 地图开关按钮已移除：预览不再支持收起/展开 -->
+        </div>
+      </div>
+
+      <!-- 场景故事浮动提示框 -->
+      <div id="stepTipContainer" class="stepTipContainer stepTipHide">
+        <div class="tipsTextBox">
+          <div class="tipsTextQs" id="tipsTextQs">如何快速导入薪资数据？</div>
+          <div class="tipsTextAs" id="tipsTextAs">
+            支持 Excel 一键导入，自动匹配员工信息和薪资项目
+          </div>
+          <span class="tipsTextCloseIcon" onclick="DemoApp.hideSceneStory()"
+            >×</span
+          >
+        </div>
+      </div>
+
+      <!-- 过渡页面/完成弹窗 -->
+      <div id="finishDialog" class="transitionContainer" style="display: none">
+        <div class="transitionCard">
+          <img
+            src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 200'%3E%3Crect fill='%23f5f8ff' width='500' height='200'/%3E%3Ctext x='250' y='100' text-anchor='middle' fill='%23196fff' font-size='24'%3E演示完成%3C/text%3E%3C/svg%3E"
+            alt="演示完成"
+          />
+          <div class="footerDiv">
+            <a class="primaryBtn" onclick="DemoApp.returnToList()"
+              >返回演示中心首页</a
+            >
+            <a class="linkStyle" onclick="DemoApp.restartDemo()"
+              >重新演示方案</a
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 根据url中的 democode 参数，创建script标签，加载对应的js文件 ../${democode}/mock.js
+      const urlParams = new URLSearchParams(window.location.search);
+      const democode = urlParams.get("democode");
+      if (democode) {
+        const script = document.createElement("script");
+        script.src = `../${democode}/mock.js`;
+        document.head.appendChild(script);
+      }
+
+      // 再加载app.js
+      const script = document.createElement("script");
+      script.src = "app.js";
+      document.head.appendChild(script);
+    </script>
+  </body>
+</html>

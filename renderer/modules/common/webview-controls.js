@@ -202,6 +202,23 @@ export function initBrowserModeControls() {
     });
   }
 
+  // ★ 预览控件收起 / 展开（仅隐藏工具栏控件，预览内容 + 应用壳子保持）
+  const rightColumnEl = document.getElementById('rightColumn');
+  const collapseBtn = document.getElementById('collapseControlsBtn');
+  const expandBtn = document.getElementById('previewExpandBtn');
+  if (rightColumnEl && collapseBtn) {
+    collapseBtn.addEventListener('click', () => {
+      // 收起：隐藏标题/操作组/关闭/收起按钮，仅留预览 + 壳子
+      rightColumnEl.classList.add('controls-collapsed');
+    });
+  }
+  if (rightColumnEl && expandBtn) {
+    expandBtn.addEventListener('click', () => {
+      // 展开：恢复工具栏控件
+      rightColumnEl.classList.remove('controls-collapsed');
+    });
+  }
+
   // ★ ESC 退出全屏
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && document.body.classList.contains('fullscreen-preview')) {

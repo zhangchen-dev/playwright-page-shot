@@ -42,6 +42,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ===== 本地预览（应用内 Playwright 浏览器） =====
   previewExport: () => ipcRenderer.invoke('preview-export'),
   previewHtmlFile: (filePath) => ipcRenderer.invoke('preview-html-file', filePath),
+  // ★ 地图预览：将录制场景转换为地图 + 步骤内容的预览（仅临时目录，不影响导出）
+  generateMapPreview: (payload) => ipcRenderer.invoke('generate-map-preview', payload),
   getRecordedExports: () => ipcRenderer.invoke('get-recorded-exports'),
 
   // ★ 后台管理：删除 / 下载 / 上传 / 同步到生产 / 获取存储目录

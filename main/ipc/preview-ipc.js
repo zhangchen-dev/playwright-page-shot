@@ -5,6 +5,7 @@
 const { ipcMain, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { generateMapPreview } = require('../../src/map-preview');
 
 function registerPreviewIpc({ recorder, panelWindowGetter }) {
   // ===== 保存目录选择 =====
@@ -54,6 +55,16 @@ function registerPreviewIpc({ recorder, panelWindowGetter }) {
       }
       return { success: true, filePath };
     } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // ===== ★ 地图预览：将录制场景转换为「地图 + 步骤内容」的预览（仅临时目录，不影响导出） =====
+  ipcMain.handle('generate-map-preview', async (event, payload) => {
+    try {
+      return await generateMapPreview(payload || {});
+    } catch (err) {
+      console.error('[preview-ipc] generate-map-preview 失败:', err);
       return { success: false, error: err.message };
     }
   });

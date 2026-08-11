@@ -6,6 +6,7 @@ import { api } from '../common/api.js';
 import { el } from '../common/dom.js';
 import { showToast, showConfirmDialog } from '../common/feedback.js';
 import { openPreview, toggleFullscreenPreview } from '../preview/preview.js';
+import { openMapPreview } from '../preview/map-preview.js';
 import { requestSwitchView } from '../common/layout.js';
 
 // ===== ★ 管理模式：场景列表 =====
@@ -71,10 +72,11 @@ export function buildScenarioCard(exp) {
   header.appendChild(info);
   card.appendChild(header);
 
-  // 操作按钮
+  // 操作按钮（按功能分组：预览 / 录制 / 分发 / 删除）
   const actions = el('div', 'scenario-card-actions');
 
-  // 预览
+  // —— 预览组：常规预览、全屏预览、展示地图 ——
+  const previewGroup = el('div', 'action-group');
   const previewBtn = el('button', 'scenario-action-btn preview', '🔍 预览');
   previewBtn.addEventListener('click', async () => {
     if (exp.htmlFiles && exp.htmlFiles.length > 0) {
@@ -83,9 +85,30 @@ export function buildScenarioCard(exp) {
       showToast('该场景没有可预览的文件', 'error');
     }
   });
-  actions.appendChild(previewBtn);
+  previewGroup.appendChild(previewBtn);
 
-  // ★ 继续录制（仅有 recording_data.json 的场景显示）
+  const fullscreenPreviewBtn = el('button', 'scenario-action-btn preview', '⛶ 全屏预览');
+  fullscreenPreviewBtn.addEventListener('click', async () => {
+    if (exp.htmlFiles && exp.htmlFiles.length > 0) {
+      await openPreview(exp.htmlFiles[0].filePath, exp.htmlFiles, exp.dirName);
+      // 等待窗口尺寸调整完成后进入全屏
+      setTimeout(() => toggleFullscreenPreview(true), 300);
+    } else {
+      showToast('该场景没有可预览的文件', 'error');
+    }
+  });
+  previewGroup.appendChild(fullscreenPreviewBtn);
+
+  // ★ 展示地图（仅预览：将录制步骤作为内容展示在地图页 iframe 中，不影响导出）
+  const mapBtn = el('button', 'scenario-action-btn preview', '🗺️ 展示地图');
+  mapBtn.addEventListener('click', async () => {
+    await openMapPreview(exp);
+  });
+  previewGroup.appendChild(mapBtn);
+  actions.appendChild(previewGroup);
+
+  // —— 录制组：继续录制（仅有 recording_data.json 的场景显示） ——
+  const recGroup = el('div', 'action-group');
   if (exp.canContinue) {
     const continueBtn = el('button', 'scenario-action-btn', '▶ 继续录制');
     continueBtn.style.background = 'var(--accent-blue-bg)';
@@ -107,23 +130,12 @@ export function buildScenarioCard(exp) {
         showToast('继续录制失败：' + (result?.error || '未知错误'), 'error', 5000);
       }
     });
-    actions.appendChild(continueBtn);
+    recGroup.appendChild(continueBtn);
   }
+  actions.appendChild(recGroup);
 
-  // ★ 全屏预览
-  const fullscreenPreviewBtn = el('button', 'scenario-action-btn preview', '⛶ 全屏预览');
-  fullscreenPreviewBtn.addEventListener('click', async () => {
-    if (exp.htmlFiles && exp.htmlFiles.length > 0) {
-      await openPreview(exp.htmlFiles[0].filePath, exp.htmlFiles, exp.dirName);
-      // 等待窗口尺寸调整完成后进入全屏
-      setTimeout(() => toggleFullscreenPreview(true), 300);
-    } else {
-      showToast('该场景没有可预览的文件', 'error');
-    }
-  });
-  actions.appendChild(fullscreenPreviewBtn);
-
-  // 下载
+  // —— 分发组：下载、上传、同步到生产 ——
+  const distGroup = el('div', 'action-group');
   const downloadBtn = el('button', 'scenario-action-btn download', '📥 下载');
   downloadBtn.addEventListener('click', async () => {
     downloadBtn.disabled = true;
@@ -139,9 +151,8 @@ export function buildScenarioCard(exp) {
       showToast('下载失败：' + (result ? result.error : '未知错误'), 'error', 5000);
     }
   });
-  actions.appendChild(downloadBtn);
+  distGroup.appendChild(downloadBtn);
 
-  // 上传
   const uploadBtn = el('button', 'scenario-action-btn upload', '📤 上传');
   uploadBtn.addEventListener('click', async () => {
     uploadBtn.disabled = true;
@@ -155,7 +166,7 @@ export function buildScenarioCard(exp) {
       showToast('上传失败：' + (result ? result.error : '未知错误'), 'error', 5000);
     }
   });
-  actions.appendChild(uploadBtn);
+  distGroup.appendChild(uploadBtn);
 
   // ★ 同步到生产（仅非 prd_copy 的场景显示）
   if (!exp.dirName.endsWith('_prd_copy')) {
@@ -176,10 +187,12 @@ export function buildScenarioCard(exp) {
         showToast('同步失败：' + (result ? result.error : '未知错误'), 'error', 5000);
       }
     });
-    actions.appendChild(syncBtn);
+    distGroup.appendChild(syncBtn);
   }
+  actions.appendChild(distGroup);
 
-  // 删除
+  // —— 删除组 ——
+  const dangerGroup = el('div', 'action-group danger');
   const deleteBtn = el('button', 'scenario-action-btn delete', '🗑️ 删除');
   deleteBtn.addEventListener('click', () => {
     showConfirmDialog('确认删除', '确认删除场景 "' + (exp.sceneTitle || exp.dirName) + '" 吗？\n删除后无法恢复。', async () => {
@@ -192,7 +205,8 @@ export function buildScenarioCard(exp) {
       }
     });
   });
-  actions.appendChild(deleteBtn);
+  dangerGroup.appendChild(deleteBtn);
+  actions.appendChild(dangerGroup);
 
   card.appendChild(actions);
   return card;

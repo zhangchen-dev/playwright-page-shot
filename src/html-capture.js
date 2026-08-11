@@ -5,6 +5,9 @@
 const cheerio = require('cheerio');
 const { fixCssUrls, deduplicateCSS } = require('./css-utils');
 
+// 录制产物需在 head 注入的引导气泡 SDK（用户要求：录制的 html 都自带该脚本，平台据此渲染指引气泡）
+const AUTOUSE_SDK_URL = 'https://xft-demo.cmburl.cn/helpapp/plugin/xft_help_autouse.js';
+
 class HtmlCapture {
   constructor(page) {
     this.page = page;
@@ -132,6 +135,14 @@ class HtmlCapture {
       }
     }
 
+    // 6.5 注入引导气泡 SDK（录制 HTML 需自带该脚本，平台据此渲染指引气泡）
+    const autouseTag = this._buildAutouseScriptTag();
+    if ($('head').length) {
+      $('head').append(autouseTag);
+    } else if ($('body').length) {
+      $('body').prepend(autouseTag);
+    }
+
     // 7. 处理 iframe 内容
     const iframeFiles = await this._captureIframes($, stepId, currentUrl);
 
@@ -222,6 +233,14 @@ class HtmlCapture {
       } else if ($('body').length) {
         $('body').before(cssLink);
       }
+    }
+
+    // 5.5 注入引导气泡 SDK（录制 HTML 需自带该脚本，平台据此渲染指引气泡）
+    const autouseTag = this._buildAutouseScriptTag();
+    if ($('head').length) {
+      $('head').append(autouseTag);
+    } else if ($('body').length) {
+      $('body').prepend(autouseTag);
     }
 
     // 6. iframe 处理 — 使用渲染进程预捕获的 iframe 数据生成文件
@@ -484,10 +503,26 @@ class HtmlCapture {
 
     cssContent = deduplicateCSS(cssContent);
 
+    // 注入引导气泡 SDK（录制的 iframe 内容同样需自带该脚本）
+    const autouseTag = this._buildAutouseScriptTag();
+    if ($('head').length) {
+      $('head').append(autouseTag);
+    } else if ($('body').length) {
+      $('body').prepend(autouseTag);
+    }
+
     return {
       html: '<!DOCTYPE html>\n' + $.html(),
       cssContent,
     };
+  }
+
+  /**
+   * 生成「引导气泡 SDK」脚本标签。
+   * 录制产物（步骤 HTML 及其 iframe）需在 head 注入该脚本，真实平台据此加载 xft-help-autouse 引擎并渲染指引气泡。
+   */
+  _buildAutouseScriptTag() {
+    return '<script src="' + AUTOUSE_SDK_URL + '"></script>';
   }
 
   /**

@@ -535,127 +535,11 @@ class Recorder {
   }
 
   /**
-   * ★ 全局重新编号所有步骤的 stepId 和文件引用
-   * 同时重置 isEndRecording / nextStepId，并修复 htmlContent 中的导航脚本
+   * ★ 全局重新编号所有步骤的 stepId 和文件引用（重录路径）
+   * 现统一委托给 _sequentialRenumber，确保命名无缺口、导航链跨模块连续、且无陈旧脚本残留
    */
   _renumberAllSteps() {
-    // 第一遍：分配新的 stepId（从 step1 开始全局递增）
-    let stepNum = 0;
-    // 记录每个 step 的旧 id → 新 id 映射
-    const idMap = new Map();
-    for (const mainMod of this.mainModules) {
-      for (const subMod of (mainMod.subModules || [])) {
-        if (!subMod.steps) continue;
-        for (let i = 0; i < subMod.steps.length; i++) {
-          stepNum++;
-          const newId = 'step' + stepNum;
-          const snapshot = subMod.steps[i];
-          const oldId = snapshot.stepId;
-          idMap.set(oldId, newId);
-        }
-      }
-    }
-
-    // 第二遍：真正修改 step 字段和 htmlContent
-    stepNum = 0;
-    for (const mainMod of this.mainModules) {
-      for (const subMod of (mainMod.subModules || [])) {
-        if (!subMod.steps) continue;
-        for (let i = 0; i < subMod.steps.length; i++) {
-          stepNum++;
-          const newId = 'step' + stepNum;
-          const snapshot = subMod.steps[i];
-          const oldId = snapshot.stepId;
-
-          // ★ 记录旧的文件引用（用于后续更新 htmlContent 中的链接）
-          //    重编号后 cssFile/iframeFiles 字段会更新为新名，但 htmlContent 中的
-          //    <link href="./oldId.css"> 和 <iframe src="./oldId_iframe_1.html">
-          //    仍指向旧文件名。导出时目录被清空重写，旧文件名不存在 → CSS 丢失。
-          const oldCssFile = snapshot.cssFile;
-          const oldIframeFilenames = (Array.isArray(snapshot.iframeFiles)
-            ? snapshot.iframeFiles.map((f) => f.filename)
-            : []);
-
-          // 更新字段
-          snapshot.stepId = newId;
-          snapshot.htmlFile = newId + '.html';
-          snapshot.cssFile = newId + '.css';
-          // iframe 文件名也按 stepId 重命名
-          if (Array.isArray(snapshot.iframeFiles)) {
-            let iframeIdx = 0;
-            for (const iframe of snapshot.iframeFiles) {
-              iframeIdx++;
-              iframe.filename = newId + '_iframe_' + iframeIdx + '.html';
-              if (iframe.cssFilename) {
-                iframe.cssFilename = newId + '_iframe_' + iframeIdx + '.css';
-              }
-            }
-          }
-
-          // ★ 修复 htmlContent 中的 CSS / iframe 文件引用
-          //    将 ./oldCssFile → ./newCssFile，./oldIframeFile → ./newIframeFile
-          if (snapshot.htmlContent) {
-            if (oldCssFile && oldCssFile !== snapshot.cssFile) {
-              snapshot.htmlContent = snapshot.htmlContent
-                .split('./' + oldCssFile).join('./' + snapshot.cssFile);
-            }
-            if (oldIframeFilenames.length > 0 && Array.isArray(snapshot.iframeFiles)) {
-              for (let ii = 0; ii < oldIframeFilenames.length; ii++) {
-                const oldFn = oldIframeFilenames[ii];
-                const newFn = snapshot.iframeFiles[ii]
-                  ? snapshot.iframeFiles[ii].filename : null;
-                if (oldFn && newFn && oldFn !== newFn) {
-                  snapshot.htmlContent = snapshot.htmlContent
-                    .split('./' + oldFn).join('./' + newFn);
-                }
-              }
-            }
-          }
-
-          // ★ 修复 nextStepId：使用 stepNum + 1（下一位置的 newId）
-          //    注意：subMod.steps[i + 1].stepId 此时还是旧 ID，不能直接使用
-          //    isEndRecording 保持原值（不覆盖）：保留原始的"子模块结束"和"录制结束"标记
-          if (i < subMod.steps.length - 1) {
-            snapshot.nextStepId = 'step' + (stepNum + 1);
-          } else {
-            snapshot.nextStepId = null;
-            // ★ 子模块最后一步：如果原来是 endRecording 才保留（避免覆盖中间子模块的结束标记）
-            if (!('isEndRecording' in snapshot)) {
-              snapshot.isEndRecording = true;
-            }
-          }
-        }
-      }
-    }
-
-    // ★ 第三遍：根据 nextStepId 修复 htmlContent 中的 nav script
-    //  - 有 nextStepId：将 htmlContent 中的 var nextStep 替换为正确的 nextStepId
-    //  - 无 nextStepId（最后一步/子模块结束）：移除整个 navigation script
-    //    这是修复"重录后下一步跳转错误"的关键：旧 var nextStep 可能指向一个不存在的 stepId
-    const navScriptRegex = /<script>\s*\(function\(\)\s*\{[\s\S]*?var nextStep = "[^"]*";[\s\S]*?\}\)\(\);\s*<\/script>/;
-    const navVarRegex = /var nextStep = "[^"]*";/;
-    for (const mainMod of this.mainModules) {
-      for (const subMod of (mainMod.subModules || [])) {
-        if (!subMod.steps) continue;
-        for (const snapshot of subMod.steps) {
-          if (!snapshot.htmlContent) continue;
-          if (snapshot.nextStepId) {
-            // ★ 有下一步：将 var nextStep 替换为正确的 nextStepId
-            const newNavVar = 'var nextStep = "' + snapshot.nextStepId + '";';
-            if (navVarRegex.test(snapshot.htmlContent)) {
-              snapshot.htmlContent = snapshot.htmlContent.replace(navVarRegex, newNavVar);
-            }
-          } else {
-            // ★ 无下一步（最后一步/子模块结束）：移除整个 navigation script
-            if (navScriptRegex.test(snapshot.htmlContent)) {
-              snapshot.htmlContent = snapshot.htmlContent.replace(navScriptRegex, '');
-            }
-          }
-        }
-      }
-    }
-
-    this.stepCount = stepNum;
+    this._sequentialRenumber();
   }
 
   _clearRecording(msg) {
@@ -899,52 +783,82 @@ class Recorder {
     return all;
   }
 
-  _fixStepNavigationLinks() {
-    const allStepsOrdered = [];
+  /**
+   * ★ 顺序重编号 + 修复导航脚本（统一入口）
+   * 保存/导出前调用：按"扁平播放顺序"重新编号为无缺口的 step1..N，
+   * 清空所有陈旧导航脚本，注入唯一一条 iframe 感知的正确跳转脚本。
+   * 修复：
+   *   ① 命名带缺口（step1/step2/step9/step12）—— 重录/新增主步骤模块导致 stepCount 不连续；
+   *   ② 同页多条陈旧跳转指向不存在文件（step3/step10/step13）—— 旧逻辑只替换首条、且 nextStepId
+   *      已正确时直接跳过整页，陈旧脚本永不清理；
+   *   ③ 子模块边界断链 —— 旧逻辑在子模块末步置 nextStepId=null；
+   *   ④ 点击元素在 iframe 内时挂不上 handler —— 旧注入版只用 document.getElementById。
+   */
+  _sequentialRenumber() {
+    // 第一遍：扁平收集所有步骤（mainModules → subModules → steps 播放顺序）
+    const allSteps = [];
     for (const mainMod of this.mainModules) {
-      for (const subMod of mainMod.subModules) {
-        if (subMod.steps) allStepsOrdered.push(...subMod.steps);
+      for (const subMod of (mainMod.subModules || [])) {
+        if (subMod.steps) allSteps.push(...subMod.steps);
       }
     }
+    if (allSteps.length === 0) return;
 
-    for (let i = 0; i < allStepsOrdered.length; i++) {
-      const snapshot = allStepsOrdered[i];
-      const correctNextStepId = i < allStepsOrdered.length - 1 ? allStepsOrdered[i + 1].stepId : null;
-      if (snapshot.nextStepId === correctNextStepId) continue;
+    // 第二遍：分配新 stepId，修复资源引用与 nextStepId
+    for (let i = 0; i < allSteps.length; i++) {
+      const snapshot = allSteps[i];
+      const newId = 'step' + (i + 1);
 
-      const oldNextStepId = snapshot.nextStepId;
-      snapshot.nextStepId = correctNextStepId;
+      // 记录旧文件名（替换 htmlContent 内资源引用用）
+      const oldCssFile = snapshot.cssFile;
+      const oldIframeFilenames = Array.isArray(snapshot.iframeFiles)
+        ? snapshot.iframeFiles.map((f) => f.filename)
+        : [];
 
-      if (oldNextStepId) {
-        const oldNavVar = 'var nextStep = "' + oldNextStepId + '";';
-        if (correctNextStepId) {
-          const newNavVar = 'var nextStep = "' + correctNextStepId + '";';
-          snapshot.htmlContent = snapshot.htmlContent.split(oldNavVar).join(newNavVar);
-        } else {
-          snapshot.htmlContent = snapshot.htmlContent.replace(
-            /<script>\s*\(function\(\)\s*\{[\s\S]*?var nextStep = "[^"]*";[\s\S]*?\}\)\(\);\s*<\/script>/,
-            ''
-          );
+      // 更新字段
+      snapshot.stepId = newId;
+      snapshot.htmlFile = newId + '.html';
+      snapshot.cssFile = newId + '.css';
+      if (Array.isArray(snapshot.iframeFiles)) {
+        let iframeIdx = 0;
+        for (const iframe of snapshot.iframeFiles) {
+          iframeIdx++;
+          iframe.filename = newId + '_iframe_' + iframeIdx + '.html';
+          if (iframe.cssFilename) iframe.cssFilename = newId + '_iframe_' + iframeIdx + '.css';
         }
-      } else if (correctNextStepId && snapshot.elementIds && snapshot.elementIds.length > 0) {
-        const elementIdsJson = JSON.stringify(snapshot.elementIds);
-        // ★ 使用协议检测版本的导航脚本（与 html-capture.js _buildNavScript 一致）
-        const navScript =
-          '<script>(function() {\n' +
-          '  var elementIds = ' + elementIdsJson + ';\n' +
-          '  var nextStep = "' + correctNextStepId + '";\n' +
-          '  var originName = null;\n' +
-          '  function handleClick() {\n' +
-          '    var baseUrl = (window.location.protocol === "file:" || !originName) ? "./" : originName;\n' +
-          '    window.location.href = baseUrl + nextStep + ".html";\n' +
-          '  }\n' +
-          '  elementIds.forEach(function(id) {\n' +
-          '    var el = document.getElementById(id);\n' +
-          '    if (!el) return;\n' +
-          '    el.addEventListener("click", handleClick);\n' +
-          '    el.style.cursor = "pointer";\n' +
-          '  });\n' +
-          '})();</script>';
+      }
+
+      // 修复 htmlContent 内的资源引用（仅替换本步骤自身引用的旧文件名）
+      if (snapshot.htmlContent) {
+        if (oldCssFile && oldCssFile !== snapshot.cssFile) {
+          snapshot.htmlContent = snapshot.htmlContent.split('./' + oldCssFile).join('./' + snapshot.cssFile);
+        }
+        if (oldIframeFilenames.length > 0 && Array.isArray(snapshot.iframeFiles)) {
+          for (let ii = 0; ii < oldIframeFilenames.length; ii++) {
+            const oldFn = oldIframeFilenames[ii];
+            const newFn = snapshot.iframeFiles[ii] ? snapshot.iframeFiles[ii].filename : null;
+            if (oldFn && newFn && oldFn !== newFn) {
+              snapshot.htmlContent = snapshot.htmlContent.split('./' + oldFn).join('./' + newFn);
+            }
+          }
+        }
+      }
+
+      // nextStepId：按扁平序列的下一位置（跨子模块连续），末页为 null
+      snapshot.nextStepId = (i < allSteps.length - 1) ? ('step' + (i + 2)) : null;
+    }
+
+    // 第三遍：清空所有陈旧导航脚本，并为非末页注入唯一一条 iframe 感知的正确脚本
+    for (let i = 0; i < allSteps.length; i++) {
+      const snapshot = allSteps[i];
+      if (!snapshot.htmlContent) continue;
+      // ★ 全局清除所有导航脚本（含陈旧的 step3/step10/step13 等重复脚本）
+      const navScriptGlobalRegex = /<script>\s*\(function\(\)\s*\{[\s\S]*?var nextStep = "[^"]*";[\s\S]*?\}\)\(\);\s*<\/script>/g;
+      snapshot.htmlContent = snapshot.htmlContent.replace(navScriptGlobalRegex, '');
+
+      // 非末页且有录制元素 → 注入唯一一条规范导航脚本
+      if (i < allSteps.length - 1 && Array.isArray(snapshot.elementIds) && snapshot.elementIds.length > 0) {
+        const navScript = this._buildCanonicalNavScript(snapshot.elementIds, snapshot.nextStepId);
         if (snapshot.htmlContent.includes('</body>')) {
           snapshot.htmlContent = snapshot.htmlContent.replace('</body>', navScript + '\n</body>');
         } else {
@@ -952,6 +866,55 @@ class Recorder {
         }
       }
     }
+
+    this.stepCount = allSteps.length;
+    console.log(`[Recorder] 顺序重编号完成：共 ${allSteps.length} 步，命名 step1..step${allSteps.length}`);
+  }
+
+  /**
+   * ★ 构建规范导航脚本（与 html-capture.js _buildNavScript 一致，含 iframe 感知查找）
+   * 保留 var originName = null; 以便 _injectOriginName 在远端环境注入真实地址
+   */
+  _buildCanonicalNavScript(elementIds, nextStepId) {
+    const elementIdsJson = JSON.stringify(elementIds || []);
+    return `<script>(function() {
+  var elementIds = ${elementIdsJson};
+  var nextStep = "${nextStepId}";
+  var originName = null;
+  function handleClick() {
+    var baseUrl = (window.location.protocol === 'file:' || !originName)
+      ? './'
+      : originName;
+    window.location.href = baseUrl + nextStep + '.html';
+  }
+  // ★ 查找元素：先顶层 document，再遍历所有同域 iframe 的 document
+  function findElementById(id) {
+    var el = document.getElementById(id);
+    if (el) return el;
+    var iframes = document.querySelectorAll('iframe');
+    for (var i = 0; i < iframes.length; i++) {
+      try {
+        var doc = iframes[i].contentDocument || (iframes[i].contentWindow && iframes[i].contentWindow.document);
+        if (doc) {
+          el = doc.getElementById(id);
+          if (el) return el;
+        }
+      } catch(e) { /* 跨域 iframe 跳过 */ }
+    }
+    return null;
+  }
+  elementIds.forEach(function(id) {
+    var el = findElementById(id);
+    if (!el) return;
+    el.addEventListener('click', handleClick);
+    el.style.cursor = 'pointer';
+  });
+})();</script>`;
+  }
+
+  // ★ 兼容旧调用：统一走 _sequentialRenumber
+  _fixStepNavigationLinks() {
+    this._sequentialRenumber();
   }
 
   /**

@@ -7,10 +7,12 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "install:browser": "npx playwright install chromium",
-    "build:win": "electron-builder --win",
-    "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux",
-    "build:dir": "electron-builder --win --dir"
+    "build:win": "electron-builder --config electron-builder.config.cjs --win",
+    "build:mac": "electron-builder --config electron-builder.config.cjs --mac",
+    "build:linux": "electron-builder --config electron-builder.config.cjs --linux",
+    "pack:win": "electron-builder --config electron-builder.config.cjs --win --dir",
+    "build": "npm run build:win",
+    "dist:zip": "powershell -NoProfile -Command \"Compress-Archive -Path 'dist/win-unpacked/*' -DestinationPath ('dist/scene-recorder-' + $env:npm_package_version + '-win-portable.zip') -Force\""
   },
   "dependencies": {
     "cheerio": "^1.0.0",

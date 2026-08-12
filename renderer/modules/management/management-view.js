@@ -21,8 +21,17 @@ export async function renderManagementView() {
   const c = document.getElementById('content');
   if (!c) return;
   c.innerHTML = '';
-  c.appendChild(el('div', 'section-title', '已录制场景'));
-  c.appendChild(el('div', 'empty-state', '加载中...'));
+
+  // ★ 标题 + 计数徽章（先占位，加载完成后再回填）
+  const titleEl = el('div', 'section-title', '已录制场景');
+  const countBadge = el('span', 'scenario-count-badge', '');
+  titleEl.appendChild(countBadge);
+  c.appendChild(titleEl);
+
+  // 加载占位（带 spinner）
+  const placeholder = el('div', 'scenario-empty');
+  placeholder.innerHTML = '<div class="loading-spinner"></div>';
+  c.appendChild(placeholder);
 
   const result = await api.getRecordedExports();
 
@@ -30,21 +39,33 @@ export async function renderManagementView() {
   //    如果已不在管理视图，放弃渲染防止覆盖录制UI
   if (appState.currentView !== 'management') return;
 
-  c.innerHTML = '';
+  placeholder.remove();
 
   if (!result || !result.success) {
-    c.appendChild(el('div', 'empty-state', '加载失败: ' + (result ? result.error : '未知错误')));
+    showScenarioEmpty(c, '⚠️', '加载失败', (result ? result.error : '未知错误'));
     return;
   }
 
   if (!result.exports || result.exports.length === 0) {
-    c.appendChild(el('div', 'empty-state', '暂无已录制的内容'));
+    showScenarioEmpty(c, '🎬', '暂无已录制内容', '录制一个场景后会显示在这里');
     return;
   }
+
+  // 回填计数徽章
+  countBadge.textContent = result.exports.length + ' 个';
 
   result.exports.forEach((exp) => {
     c.appendChild(buildScenarioCard(exp));
   });
+}
+
+/** ★ 场景列表空/错误状态 */
+function showScenarioEmpty(container, emoji, title, subtitle) {
+  const wrap = el('div', 'scenario-empty');
+  wrap.appendChild(el('span', 'empty-emoji', emoji));
+  wrap.appendChild(el('div', 'empty-title', title));
+  if (subtitle) wrap.appendChild(el('div', 'empty-subtitle', subtitle));
+  container.appendChild(wrap);
 }
 
 /** 构建场景卡片 */
@@ -52,31 +73,38 @@ export function buildScenarioCard(exp) {
   const card = el('div', 'scenario-card');
   // ★ 标记目录名（用于预览高亮）
   card.dataset.dirname = exp.dirName;
-  if (exp.dirName === appState.currentPreviewDirName) card.classList.add('scenario-card-active');
+  const isActive = exp.dirName === appState.currentPreviewDirName;
+  if (isActive) card.classList.add('scenario-card-active');
 
-  // 头部信息
+  // ─── 头部：标题 / 副标题 / 元信息 + 当前预览徽章 ───
   const header = el('div', 'scenario-card-header');
   const info = el('div', 'scenario-card-info');
   info.appendChild(el('div', 'scenario-card-title', exp.sceneTitle || exp.dirName));
   if (exp.sceneSubTitle) {
     info.appendChild(el('div', 'scenario-card-subtitle', exp.sceneSubTitle));
   }
-
-  // 修改时间
-  try {
-    const stat = { mtime: new Date() }; // 后端已排序，仅展示步骤数
-    info.appendChild(el('div', 'scenario-card-meta', exp.stepCount + ' 步 | 目录: ' + exp.dirName));
-  } catch (e) {
-    info.appendChild(el('div', 'scenario-card-meta', exp.stepCount + ' 步'));
-  }
+  // 元信息：步数 / 目录名（独立胶囊样式）
+  const meta = el('div', 'scenario-card-meta');
+  meta.appendChild(el('span', 'scenario-card-meta-item', '📊 ' + exp.stepCount + ' 步'));
+  meta.appendChild(el('span', 'scenario-card-meta-item', '📂 ' + exp.dirName));
+  info.appendChild(meta);
   header.appendChild(info);
+
+  if (isActive) {
+    header.appendChild(el('div', 'scenario-card-badge', '● 当前预览'));
+  }
   card.appendChild(header);
 
-  // 操作按钮（按功能分组：预览 / 录制 / 分发 / 删除）
+  // ─── 操作区（两行布局：第 1 行 = 预览 + 录制；第 2 行 = 分发 + 删除） ───
   const actions = el('div', 'scenario-card-actions');
 
-  // —— 预览组：常规预览、全屏预览、展示地图 ——
+  // Row 1 ── 预览 + 录制
+  const row1 = el('div', 'action-group-row');
+
+  // —— 预览组：常规预览 / 全屏预览 / 展示地图 ——
   const previewGroup = el('div', 'action-group');
+  previewGroup.appendChild(el('span', 'action-group-label', '预览'));
+
   const previewBtn = el('button', 'scenario-action-btn preview', '🔍 预览');
   previewBtn.addEventListener('click', async () => {
     if (exp.htmlFiles && exp.htmlFiles.length > 0) {
@@ -105,11 +133,13 @@ export function buildScenarioCard(exp) {
     await openMapPreview(exp);
   });
   previewGroup.appendChild(mapBtn);
-  actions.appendChild(previewGroup);
+  row1.appendChild(previewGroup);
 
   // —— 录制组：继续录制（仅有录制元数据的场景显示） ——
-  const recGroup = el('div', 'action-group');
   if (exp.canContinue) {
+    const recGroup = el('div', 'action-group');
+    recGroup.appendChild(el('span', 'action-group-label', '录制'));
+
     const continueBtn = el('button', 'scenario-action-btn', '▶ 继续录制');
     continueBtn.style.background = 'var(--accent-blue-bg)';
     continueBtn.style.color = 'var(--accent-blue)';
@@ -131,11 +161,17 @@ export function buildScenarioCard(exp) {
       }
     });
     recGroup.appendChild(continueBtn);
+    row1.appendChild(recGroup);
   }
-  actions.appendChild(recGroup);
+  actions.appendChild(row1);
 
-  // —— 分发组：下载、上传、同步到生产 ——
+  // Row 2 ── 分发 + 删除
+  const row2 = el('div', 'action-group-row');
+
+  // —— 分发组：下载 / 上传 / 同步到生产 ——
   const distGroup = el('div', 'action-group');
+  distGroup.appendChild(el('span', 'action-group-label', '分发'));
+
   const downloadBtn = el('button', 'scenario-action-btn download', '📥 下载');
   downloadBtn.addEventListener('click', async () => {
     downloadBtn.disabled = true;
@@ -189,9 +225,9 @@ export function buildScenarioCard(exp) {
     });
     distGroup.appendChild(syncBtn);
   }
-  actions.appendChild(distGroup);
+  row2.appendChild(distGroup);
 
-  // —— 删除组 ——
+  // —— 删除组（右对齐）——
   const dangerGroup = el('div', 'action-group danger');
   const deleteBtn = el('button', 'scenario-action-btn delete', '🗑️ 删除');
   deleteBtn.addEventListener('click', () => {
@@ -206,8 +242,9 @@ export function buildScenarioCard(exp) {
     });
   });
   dangerGroup.appendChild(deleteBtn);
-  actions.appendChild(dangerGroup);
+  row2.appendChild(dangerGroup);
 
+  actions.appendChild(row2);
   card.appendChild(actions);
   return card;
 }

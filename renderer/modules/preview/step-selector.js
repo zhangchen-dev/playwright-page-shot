@@ -63,7 +63,7 @@ export function renderPreviewStepSelector() {
   prevBtn.addEventListener('click', () => navigateToStep(appState.currentPreviewStepIndex - 1));
   nextBtn.addEventListener('click', () => navigateToStep(appState.currentPreviewStepIndex + 1));
 
-  // ★ 重录该步骤按钮（需要 recording_data.json 才可点击）
+  // ★ 重录该步骤按钮（需要该场景存在录制元数据才可点击）
   const rerecordBtn = el('button', 'preview-rerecord-btn', '🔄 重录该步骤');
   rerecordBtn.title = '将该步骤的录制内容重新录制（加载场景数据）';
 

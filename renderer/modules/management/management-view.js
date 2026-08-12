@@ -107,7 +107,7 @@ export function buildScenarioCard(exp) {
   previewGroup.appendChild(mapBtn);
   actions.appendChild(previewGroup);
 
-  // —— 录制组：继续录制（仅有 recording_data.json 的场景显示） ——
+  // —— 录制组：继续录制（仅有录制元数据的场景显示） ——
   const recGroup = el('div', 'action-group');
   if (exp.canContinue) {
     const continueBtn = el('button', 'scenario-action-btn', '▶ 继续录制');

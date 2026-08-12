@@ -146,12 +146,24 @@ class Recorder {
   }
 
   _startRecording(msg) {
-    const { sceneTitle, sceneSubTitle, sceneName, sceneCode } = msg;
+    const { sceneTitle, sceneSubTitle, sceneName, sceneCode, sceneCodeSuffix } = msg;
     if (!sceneTitle || !sceneName) {
       return { stateChanged: false, response: { type: 'error', message: '场景主标题和名称为必填项' } };
     }
+    // ★ 场景码校验：仅允许字母、数字、下划线、中划线（不含汉字/特殊字符）
+    //   场景码会作为导出目录名与演示地址的一部分，必须是安全字符集
+    //   场景名称为展示名称，可输入任意文本，仅做必填校验
+    if (sceneCode && !/^[a-zA-Z0-9_-]+$/.test(sceneCode)) {
+      return {
+        stateChanged: false,
+        response: { type: 'error', message: '场景码只能包含字母、数字、下划线、中划线，不能包含汉字或特殊字符' },
+      };
+    }
+    const codeBase = sceneCode || sceneName;
     this.sceneConfig = { sceneTitle, sceneSubTitle: sceneSubTitle || '', sceneName };
-    this.sceneCode = sceneCode || sceneName; // ★ 场景码
+    // ★ 场景码 = 用户输入 + "-" + 4 位随机（数字+字母），仅生成一次、全程保持不变
+    //   sceneCodeSuffix 由录制面板生成并传入，保证 UI 实时展示的场景码与最终一致
+    this.sceneCode = codeBase + '-' + (sceneCodeSuffix || this._genRandomSuffix(4));
     this.mainModules = [{
       mainModuleName: '',
       mainModuleDesc: '',
@@ -225,6 +237,7 @@ class Recorder {
   async _nextStep(msg) {
     const { pageId } = msg;
     const activePageId = pageId || this._getActivePageId();
+    this._saveCurrentModuleMeta(msg);
     if (!this.browserManager) {
       return { stateChanged: false, response: { type: 'error', message: '浏览器管理器未初始化' } };
     }
@@ -272,6 +285,7 @@ class Recorder {
   async _nextStepWebview(msg) {
     const { url, html, cssContents, iframes, isEndRecording: forceEnd } = msg;
     const activePageId = 'webview';
+    this._saveCurrentModuleMeta(msg);
     const marks = this.pageMarks.get(activePageId) || [];
 
     try {
@@ -310,6 +324,8 @@ class Recorder {
   async _addSubModule(msg) {
     const { pageId, modName, introduction } = msg;
     const activePageId = pageId || this._getActivePageId();
+    // ★ 先把当前模块名/描述、当前主步骤标题落库，避免重渲染后模块内容变空
+    this._saveCurrentModuleMeta(msg);
 
     const marks = this.pageMarks.get(activePageId) || [];
     if (marks.length > 0) {
@@ -435,7 +451,8 @@ class Recorder {
     this.resourceBaseUrl = resourceBaseUrl || '';
     // ★ 环境配置
     this.environment = environment || 'local';
-    this.sceneCode = sceneCode || this.sceneCode;
+    // ★ 场景码已在开始录制时生成（含 4 位随机后缀），保存时保持不变，避免覆盖已带后缀的值
+    this.sceneCode = this.sceneCode || sceneCode;
     this.envBaseUrl = envBaseUrl || '';
 
     try {
@@ -770,9 +787,39 @@ class Recorder {
     return null;
   }
 
+  /**
+   * ★ 把当前模块名/描述、当前主步骤标题落库（避免「下一步/新增主步骤」等动作后表单被清空、重渲染时模块内容变空）。
+   *   仅当传入非空字符串时才覆盖，避免把已保存的内容误清空。
+   *   各动作（nextStep / nextStepWebview / addSubModule / addMainModule / endAndSave）调用前先执行一次。
+   */
+  _saveCurrentModuleMeta(msg) {
+    if (!msg) return;
+    const { mainModName, mainModDesc, modName } = msg;
+    const mainMod = this._getCurrentMainModule();
+    if (mainMod) {
+      if (typeof mainModName === 'string' && mainModName) mainMod.mainModuleName = mainModName;
+      if (typeof mainModDesc === 'string' && mainModDesc) mainMod.mainModuleDesc = mainModDesc;
+    }
+    const subMod = this._getCurrentSubModule();
+    if (subMod && typeof modName === 'string' && modName) subMod.mainStepTitle = modName;
+  }
+
   _generateStepId() {
     this.stepCount++;
     return 'step' + this.stepCount;
+  }
+
+  /**
+   * ★ 生成 N 位随机后缀（仅数字 + 字母），用于拼接在场景码末尾
+   *   字符集为 [a-zA-Z0-9]，避免与用户分隔符/特殊字符混淆
+   */
+  _genRandomSuffix(len) {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let s = '';
+    for (let i = 0; i < len; i++) {
+      s += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return s;
   }
 
   _getAllMarks() {

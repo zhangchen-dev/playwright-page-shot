@@ -5,6 +5,29 @@
 const fs = require('fs-extra');
 const path = require('path');
 
+/**
+ * ★ recording_data.json 存放路径（已移出导出目录）
+ * 放在 recordingsRoot 的上一级 recording-meta/<dirName>/ 下，
+ * 与导出目录（recordingsRoot/<dirName>/）平级隔离，确保导出/下载产物不含该文件。
+ * 仅供"继续录制 / 重录该步骤"等内部功能使用。
+ */
+function getRecordingMetaPath(outputDir, dirName) {
+  return path.join(outputDir, '..', 'recording-meta', dirName, 'recording_data.json');
+}
+
+/**
+ * ★ 兼容解析 recording_data.json 实际路径
+ * 优先读取已移出的 meta 目录（recordingsRoot/../recording-meta/<dirName>/），
+ * 若不存在则回退到旧版导出目录内（recordingsRoot/<dirName>/），
+ * 保证本次改动前已导出的场景「继续录制 / 地图预览」仍可用。
+ * 注意：返回的路径可能不存在，调用方仍需 existsSync 判断。
+ */
+function resolveRecordingDataPath(outputDir, dirName) {
+  const meta = getRecordingMetaPath(outputDir, dirName);
+  if (fs.existsSync(meta)) return meta;
+  return path.join(outputDir, dirName, 'recording_data.json');
+}
+
 class Exporter {
   constructor({ outputDir }) {
     this.outputDir = outputDir;
@@ -116,7 +139,9 @@ class Exporter {
     await fs.writeFile(path.join(exportDir, 'demo_config.json'), JSON.stringify(config, null, 4), 'utf-8');
     fileCount++;
 
-    // ★ 写入完整录制数据（用于"继续录制"功能）
+    // ★ 写入完整录制数据（用于"继续录制"功能）— 移出导出目录，
+    //    存放到 recordingsRoot 上一级的 recording-meta/<dirName>/ 下，
+    //    确保导出/下载产物不含该文件。
     const recordingData = {
       sceneConfig: recorder.sceneConfig,
       sceneCode: recorder.sceneCode,
@@ -127,7 +152,9 @@ class Exporter {
       environment: recorder.environment,
       envBaseUrl: recorder.envBaseUrl,
     };
-    await fs.writeFile(path.join(exportDir, 'recording_data.json'), JSON.stringify(recordingData), 'utf-8');
+    const metaPath = getRecordingMetaPath(this.outputDir, dirName);
+    await fs.ensureDir(path.dirname(metaPath));
+    await fs.writeFile(metaPath, JSON.stringify(recordingData), 'utf-8');
     fileCount++;
 
     console.log(`[Exporter] 导出完成: ${fileCount} 个文件保存到 ${exportDir}`);
@@ -203,9 +230,9 @@ class Exporter {
               placeSelector: '#' + (mark.elementId || ''),
               clickSelector: '#' + (mark.elementId || ''),
             };
-            if (mark.showNextStep !== undefined) {
-              selectorObj.showNextStep = !!mark.showNextStep;
-            }
+            // ★ 是否展示「下一步」按钮：与录制选择一致（recorder 默认 true；用户取消勾选则 false）。
+            //   始终写入该字段（true/false），确保配置显式反映录制选择，便于本地预览与真实演示系统读取。
+            selectorObj.showNextStep = mark.showNextStep !== false;
             // 最后一个步骤的最后一个标记设为 isAutoNextStep
             if (stepOrderInModule === marks.length && snapshot.isEndRecording) {
               selectorObj.isAutoNextStep = true;
@@ -252,4 +279,4 @@ class Exporter {
   }
 }
 
-module.exports = { Exporter };
+module.exports = { Exporter, getRecordingMetaPath, resolveRecordingDataPath };

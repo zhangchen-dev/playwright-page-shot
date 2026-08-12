@@ -353,25 +353,24 @@
     var floatBtn = $('#floatBtn');
     var mapToggleBtn = $('#mapToggleBtn');
 
-    // 元素可能不存在（预览模板按需裁剪了部分按钮，如「下一步/重新演示」「场景故事/唤起气泡」），故全部做空值保护
     if (AppState.stepState === '0') {
       // 未开始
-      if (startBtn) startBtn.style.display = 'block';
-      if (btnContainer) btnContainer.style.display = 'none';
-      if (globalTool) globalTool.style.display = 'none';
-      if (floatBtn) floatBtn.style.display = 'none';
+      startBtn.style.display = 'block';
+      btnContainer.style.display = 'none';
+      globalTool.style.display = 'none';
+      floatBtn.style.display = 'none';
     } else if (AppState.stepState === '3') {
       // 已完成
-      if (startBtn) startBtn.style.display = 'none';
-      if (btnContainer) btnContainer.style.display = 'none';
-      if (globalTool) globalTool.style.display = 'none';
+      startBtn.style.display = 'none';
+      btnContainer.style.display = 'none';
+      globalTool.style.display = 'none';
       showFinishDialog();
     } else {
       // 进行中
-      if (startBtn) startBtn.style.display = 'none';
-      if (btnContainer) btnContainer.style.display = 'flex';
-      if (globalTool) globalTool.style.display = 'flex';
-      if (floatBtn) floatBtn.style.display = AppState.mapClose ? 'block' : 'none';
+      startBtn.style.display = 'none';
+      btnContainer.style.display = 'flex';
+      globalTool.style.display = 'flex';
+      floatBtn.style.display = AppState.mapClose ? 'block' : 'none';
     }
 
     // 地图按钮状态

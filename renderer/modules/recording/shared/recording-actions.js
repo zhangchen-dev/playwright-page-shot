@@ -24,8 +24,9 @@ export function doCompleteMark() {
   }
 
   const subTitle = subTitleInput ? subTitleInput.value.trim() : '';
-  const position = positionSelect ? positionSelect.value : 'right';
-  const showNextStep = showNextCheckbox ? showNextCheckbox.checked : true;
+  // ★ 从 appState 读取用户最新设置（录制面板已持久化，跨步骤/重渲染保留，期间用户改动即生效）
+  const position = appState.markPosition || 'right';
+  const showNextStep = appState.markShowNext !== false;
 
   sendAction('completeMark', {
     mainTitle,

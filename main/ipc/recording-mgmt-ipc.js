@@ -5,6 +5,7 @@
 const { ipcMain, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { getRecordingMetaPath, resolveRecordingDataPath } = require('../../src/export');
 
 function registerRecordingMgmtIpc({ recorder, panelWindowGetter }) {
   // ===== ★ 获取已录制的导出列表（扫描输出目录） =====
@@ -82,7 +83,7 @@ function registerRecordingMgmtIpc({ recorder, panelWindowGetter }) {
           sceneSubTitle,
           stepCount: htmlFiles.length,
           htmlFiles,
-          canContinue: fs.existsSync(path.join(exportDir, 'recording_data.json')),
+          canContinue: fs.existsSync(resolveRecordingDataPath(outputDir, entry.name)),
         });
       }
 
@@ -112,6 +113,9 @@ function registerRecordingMgmtIpc({ recorder, panelWindowGetter }) {
         return { success: false, error: '非法路径' };
       }
       await fs.promises.rm(resolved, { recursive: true, force: true });
+      // ★ 同时清理移出导出目录的录制元数据
+      const metaDir = path.join(path.dirname(recordingsRoot), 'recording-meta', path.basename(resolved));
+      await fs.promises.rm(metaDir, { recursive: true, force: true });
       return { success: true };
     } catch (err) {
       console.error('[IPC] delete-recording 失败:', err);
@@ -190,7 +194,7 @@ function registerRecordingMgmtIpc({ recorder, panelWindowGetter }) {
   // ===== ★ 继续录制 — 加载已保存的录制数据 =====
   ipcMain.handle('continue-recording', async (event, dirPath) => {
     try {
-      const dataPath = path.join(dirPath, 'recording_data.json');
+      const dataPath = resolveRecordingDataPath(recorder.outputDir, path.basename(dirPath));
       if (!fs.existsSync(dataPath)) {
         return { success: false, error: '该场景不支持继续录制（缺少录制数据文件）' };
       }
@@ -211,7 +215,7 @@ function registerRecordingMgmtIpc({ recorder, panelWindowGetter }) {
         return { success: false, error: '缺少场景信息' };
       }
       const dirPath = path.join(recorder.outputDir, dirName);
-      const dataPath = path.join(dirPath, 'recording_data.json');
+      const dataPath = resolveRecordingDataPath(recorder.outputDir, dirName);
       if (!fs.existsSync(dataPath)) {
         return { success: false, error: '该场景不支持重录（缺少录制数据文件）' };
       }
@@ -263,7 +267,7 @@ function registerRecordingMgmtIpc({ recorder, panelWindowGetter }) {
   // ===== ★ 重载场景（重录模式下，放弃重录回到原始场景查看） =====
   ipcMain.handle('reload-recording', async (event, dirPath) => {
     try {
-      const dataPath = path.join(dirPath, 'recording_data.json');
+      const dataPath = resolveRecordingDataPath(recorder.outputDir, path.basename(dirPath));
       if (!fs.existsSync(dataPath)) {
         return { success: false, error: '该场景没有录制数据' };
       }

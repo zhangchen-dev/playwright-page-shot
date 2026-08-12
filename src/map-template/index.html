@@ -52,6 +52,63 @@
           </div>
         </div>
 
+        <!-- 全局工具 -->
+        <div id="globalTool" class="toolContainer" style="display: none">
+          <img
+            src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect fill='%23d5e1f7' width='16' height='16' rx='2'/%3E%3C/svg%3E"
+            alt=""
+            class="dragIcon"
+          />
+          <img
+            src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='18' fill='%23196fff'/%3E%3Cpath d='M12 20h16M20 12v16' stroke='white' stroke-width='3'/%3E%3C/svg%3E"
+            alt=""
+            class="globalIcon"
+          />
+
+          <div class="operateBtn" onclick="DemoApp.showSceneStory()">
+            <span>场景</span>
+          </div>
+
+          <div class="operateBtn" onclick="DemoApp.showGuide()">
+            <span>指引</span>
+          </div>
+
+          <div
+            id="mapToggleBtn"
+            class="operateBtn"
+            onclick="DemoApp.toggleMap()"
+          >
+            <span>地图</span>
+          </div>
+
+          <div
+            class="operateBtn globalNextBtn"
+            onclick="DemoApp.clickNextStep()"
+          >
+            <div class="globalNextIcon">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="white">
+                <path
+                  d="M5 3l4 4-4 4"
+                  stroke="white"
+                  stroke-width="2"
+                  fill="none"
+                />
+              </svg>
+            </div>
+          </div>
+
+          <div class="changePositionBtn" onclick="DemoApp.toggleToolDisplay()">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="#666">
+              <path
+                d="M6 3l5 5-5 5"
+                stroke="#666"
+                stroke-width="2"
+                fill="none"
+              />
+            </svg>
+          </div>
+        </div>
+
         <!-- iframe页面 -->
         <div class="iframeContent">
           <iframe
@@ -70,6 +127,8 @@
 
       <!-- 步骤地图 -->
       <div id="demoMap" class="mapContainer">
+        <span class="closeSpan" onclick="DemoApp.closeMap()">收起</span>
+
         <div class="mapSubTitle" id="mapSubTitle">企业薪资管理解决方案</div>
         <div class="mapTitle normalTitle" id="mapTitle">薪福通薪资管理演示</div>
 
@@ -87,8 +146,12 @@
               <div class="tourGuidePointIcon"></div>
             </div>
           </div>
-
-          <!-- 地图开关按钮已移除：预览不再支持收起/展开 -->
+          <div id="btnContainer" class="btnContainer" style="display: none">
+            <span class="btnDisabled" onclick="DemoApp.showSceneStory()"
+              >场景故事</span
+            >
+            <span onclick="DemoApp.showGuide()">唤起气泡</span>
+          </div>
         </div>
       </div>
 
@@ -103,6 +166,16 @@
             >×</span
           >
         </div>
+      </div>
+
+      <!-- 浮动按钮-演示地图唤起按钮 -->
+      <div
+        id="floatBtn"
+        class="floatBtn"
+        style="display: none"
+        onclick="DemoApp.openMap()"
+      >
+        打开地图
       </div>
 
       <!-- 过渡页面/完成弹窗 -->

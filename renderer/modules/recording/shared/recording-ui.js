@@ -10,9 +10,25 @@ import { captureWebviewData, removeWebviewElementId } from '../internal/webview-
 import { doCompleteMark, handleEndAndSave, toggleSelectionMode } from './recording-actions.js';
 import { renderQuickLoginSection } from './credentials-ui.js';
 
+// ★ 生成 4 位随机码（数字+字母），与 recorder._genRandomSuffix 同规则，
+//   用于在录制面板提前生成场景码后缀，保证 UI 实时展示的场景码 == 最终场景码。
+function genSceneCodeSuffix() {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let s = '';
+  for (let i = 0; i < 4; i++) {
+    s += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return s;
+}
+
 // ===== 渲染：配置阶段 =====
 export function renderConfigPhase() {
   contentEl.innerHTML = '';
+
+  // ★ 进入配置阶段即重置「下一步按钮 / 气泡位置」为默认，
+  //   保证每次新录制从干净状态开始；录制中用户的改动仍会在录制面板内持久保留。
+  appState.markShowNext = true;
+  appState.markPosition = 'right';
 
   contentEl.appendChild(el('div', 'section-title', '场景配置'));
   const configBox = el('div', 'section-box');
@@ -36,14 +52,14 @@ export function renderConfigPhase() {
   });
   configBox.appendChild(subtitleField.wrapper);
 
-  // ★ 场景名称（英文/拼音）
+  // ★ 场景名称（展示名称，可输入任意文本，仅必填校验）
   const nameField = formField({
     label: '场景名称',
     required: true,
     placeholder: '例如：enterprise-login',
     id: 'sceneNameInput',
     value: appState.state.sceneConfig.sceneName,
-    hint: '用于生成目录名，建议使用英文或拼音',
+    hint: '必填，可输入任意文本（含中文），作为场景展示名称',
   });
   configBox.appendChild(nameField.wrapper);
 
@@ -54,10 +70,34 @@ export function renderConfigPhase() {
     placeholder: '例如：EL',
     id: 'sceneCodeInput',
     value: appState.state.sceneConfig.sceneCode,
-    hint: '建议使用场景名称对应的英文单词或缩写',
+    hint: '必填，用于生成目录与演示地址，仅限字母、数字、下划线、中划线',
     style: 'font-family: "Courier New", monospace; letter-spacing: 0.5px;',
   });
   configBox.appendChild(codeField.wrapper);
+
+  // ★ 提前取出各输入引用（必须在下方 updateCodePreview / addEventListener 之前声明，
+  //   否则 const 的暂时性死区会触发 ReferenceError，导致整个配置面板渲染中断）
+  const titleInput = titleField.input;
+  const subtitleInput = subtitleField.input;
+  const nameInput = nameField.input;
+  const sceneCodeInput = codeField.input;
+
+  // ★ 实时展示最终场景码 = 用户输入 + "-" + 4 位随机码（用户输入完即展示）
+  const codeSuffix = genSceneCodeSuffix();
+  const codePreview = el('div', 'code-preview');
+  codePreview.id = 'sceneCodePreview';
+  codePreview.style.marginTop = '4px';
+  codePreview.style.fontSize = '12px';
+  codePreview.style.color = 'var(--accent-blue)';
+  codePreview.style.minHeight = '16px';
+  configBox.appendChild(codePreview);
+  function updateCodePreview() {
+    const base = sceneCodeInput.value.trim() || nameInput.value.trim();
+    codePreview.textContent = base ? ('最终场景码: ' + base + '-' + codeSuffix) : '';
+  }
+  sceneCodeInput.addEventListener('input', updateCodePreview);
+  nameInput.addEventListener('input', updateCodePreview);
+  updateCodePreview();
 
   contentEl.appendChild(configBox);
 
@@ -65,17 +105,16 @@ export function renderConfigPhase() {
   startBtn.textContent = '🎬  开始录制';
   startBtn.id = 'startRecordingBtn';
 
-  const titleInput = titleField.input;
-  const subtitleInput = subtitleField.input;
-  const nameInput = nameField.input;
-  const sceneCodeInput = codeField.input;
-
   function updateStartBtn() {
     // ★ 三个必填项都填了 + 浏览器已打开
     const fieldsValid = !!(titleInput.value.trim() && nameInput.value.trim() && sceneCodeInput.value.trim());
-    startBtn.disabled = !fieldsValid || !appState.browserLaunched;
+    // ★ 场景码（目录/演示地址标识）字符集校验：仅字母、数字、下划线、中划线
+    const codeValid = /^[a-zA-Z0-9_-]+$/.test(sceneCodeInput.value.trim());
+    startBtn.disabled = !fieldsValid || !appState.browserLaunched || !codeValid;
     if (!appState.browserLaunched) {
       startBtn.title = '请先在上方输入 URL 并打开浏览器';
+    } else if (!codeValid) {
+      startBtn.title = '场景码只能包含字母、数字、下划线、中划线';
     } else {
       startBtn.title = '';
     }
@@ -105,11 +144,17 @@ export function renderConfigPhase() {
     const name = nameInput.value.trim();
     const code = sceneCodeInput.value.trim();
     if (!title || !name || !code) return;
+    // ★ 二次校验场景码字符集（与后端一致）：仅字母、数字、下划线、中划线
+    if (!/^[a-zA-Z0-9_-]+$/.test(code)) {
+      showToast('场景码只能包含字母、数字、下划线、中划线，不能包含汉字或特殊字符', 'error', 4000);
+      return;
+    }
     sendAction('startRecording', {
       sceneTitle: title,
       sceneSubTitle: subtitleInput.value.trim(),
       sceneName: name,
       sceneCode: code, // ★ 传递场景码
+      sceneCodeSuffix: codeSuffix, // ★ 传递 UI 生成的随机后缀，保证展示==最终
     });
   });
   contentEl.appendChild(startBtn);
@@ -306,6 +351,8 @@ export function renderRecordingPhase() {
   const modNameInput = modNameField.input;
   addSubModuleBtn.addEventListener('click', async () => {
     const modName = modNameInput ? modNameInput.value.trim() : '';
+    const mainModName = mainModNameInput ? mainModNameInput.value.trim() : '';
+    const mainModDesc = mainModDescInput ? mainModDescInput.value.trim() : '';
     const intro = collectIntroduction();
     appState.clearFormOnNextRender = true;
     updateStatus('正在处理...', 'var(--accent-blue)');
@@ -317,7 +364,7 @@ export function renderRecordingPhase() {
         showToast('捕获页面失败: ' + err.message, 'error'); return; }
     }
     await sendAction('addSubModule', {
-      modName, introduction: intro,
+      modName, mainModName, mainModDesc, introduction: intro,
       pageId: appState.browserMode === 'in-app' ? 'webview' : undefined,
       ...(webviewData || {}),
     });
@@ -392,7 +439,9 @@ export function renderRecordingPhase() {
       { value: 'left',   label: 'left',   icon: '⬅️' },
       { value: 'top',    label: 'top',    icon: '⬆️' },
     ],
-    value: 'right',
+    // ★ 从 appState 读取上次选择，跨步骤/重渲染保持不变（期间用户可改，改动即生效）
+    value: appState.markPosition || 'right',
+    onChange: (v) => { appState.markPosition = v; },
   });
   positionWrapper.appendChild(positionSelectDropdown.wrapper);
   positionRow.appendChild(positionWrapper);
@@ -402,12 +451,13 @@ export function renderRecordingPhase() {
   const showNextLabel = el('label', 'field-label', '下一步按钮 (showNextStep)');
   showNextWrapper.appendChild(showNextLabel);
   const showNextControl = el('div', 'switch-control');
-  const showNextText = el('span', 'switch-text', '显示');
+  const showNextText = el('span', 'switch-text', (appState.markShowNext !== false) ? '显示' : '隐藏');
   const showNextToggle = el('label', 'switch');
   const showNextCheckbox = el('input');
   showNextCheckbox.type = 'checkbox';
   showNextCheckbox.id = 'markShowNextStepInput';
-  showNextCheckbox.checked = true;
+  // ★ 从 appState 读取上次选择（默认显示），跨重渲染保持不变
+  showNextCheckbox.checked = appState.markShowNext !== false;
   const showNextSlider = el('span', 'slider');
   showNextToggle.appendChild(showNextCheckbox);
   showNextToggle.appendChild(showNextSlider);
@@ -418,8 +468,9 @@ export function renderRecordingPhase() {
 
   markBox.appendChild(positionRow);
 
-  // ★ 监听 showNextStep 开关，更新文字
+  // ★ 监听 showNextStep 开关，更新文字并持久化到 appState（跨步骤/重渲染保留最新值）
   showNextCheckbox.addEventListener('change', () => {
+    appState.markShowNext = showNextCheckbox.checked;
     showNextText.textContent = showNextCheckbox.checked ? '显示' : '隐藏';
   });
 
@@ -464,11 +515,19 @@ export function renderRecordingPhase() {
     nextStepBtn.textContent = '处理中...';
     updateStatus('正在捕获页面...', 'var(--accent-blue)');
 
+    // ★ 当前模块名/描述、当前主步骤标题，随下一步一并提交，避免重渲染后模块内容变空
+    const mainModName = mainModNameInput ? mainModNameInput.value.trim() : '';
+    const mainModDesc = mainModDescInput ? mainModDescInput.value.trim() : '';
+    const modName = modNameInput ? modNameInput.value.trim() : '';
+
     // ★ 应用内浏览器模式：从 webview 捕获页面数据
     if (appState.browserMode === 'in-app') {
       try {
         const webviewData = await captureWebviewData();
         if (webviewData) {
+          webviewData.mainModName = mainModName;
+          webviewData.mainModDesc = mainModDesc;
+          webviewData.modName = modName;
           await sendAction('nextStepWebview', webviewData);
         } else {
           showToast('捕获页面失败：webview 未就绪', 'error');
@@ -477,7 +536,7 @@ export function renderRecordingPhase() {
         showToast('捕获页面失败: ' + err.message, 'error');
       }
     } else {
-      await sendAction('nextStep');
+      await sendAction('nextStep', { mainModName, mainModDesc, modName });
     }
   });
   btnRow.appendChild(nextStepBtn);

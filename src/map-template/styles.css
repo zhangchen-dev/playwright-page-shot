@@ -535,50 +535,6 @@ ul li {
   background-image: url('./img/icon_btn1_disabled.svg');
 }
 
-/* 进行中底部工具条（globalTool） */
-.mapContainer .globalTool {
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-}
-
-.mapContainer .globalTool .gtBtn {
-  cursor: pointer;
-  min-width: 84px;
-  height: 32px;
-  line-height: 32px;
-  text-align: center;
-  border-radius: 16px;
-  font-size: 14px;
-  padding: 0 16px;
-  color: #fff;
-  background: linear-gradient(135deg, #4a90e2, #357abd);
-  box-shadow: 0 4px 12px rgba(53, 122, 189, 0.35);
-}
-
-.mapContainer .globalTool .gtBtn.gtRestart {
-  color: #357abd;
-  background: #fff;
-  border: 1px solid rgba(53, 122, 189, 0.4);
-  box-shadow: none;
-}
-
-/* 地图开关按钮（mapToggleBtn） */
-.mapToggleBtn {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 30;
-  cursor: pointer;
-  padding: 6px 14px;
-  border-radius: 16px;
-  font-size: 14px;
-  color: #fff;
-  background: rgba(53, 122, 189, 0.9);
-}
-
 /* ==================== 手指气泡动画 ==================== */
 .tourGuidePoint {
   pointer-events: none;

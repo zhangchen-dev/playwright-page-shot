@@ -23,6 +23,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
+const { resolveRecordingDataPath } = require('./export');
 
 // 地图页静态模板目录（已随项目打包在 src/map-template，不再依赖外部 shot-temp）
 const MAP_TEMPLATE_DIR = path.join(__dirname, 'map-template');
@@ -130,7 +131,7 @@ const AUTOUSE_BUBBLE_CSS = `.xftautouseplugin-tour-guide {
 
 // 预览模板版本标记：模板/注入逻辑有结构性变更时 +1，使旧缓存目录自动失效、强制重建
 // （避免用户之前生成的"缺 #globalTool 导致 init 崩溃"或"旧版加载 SDK 气泡"的旧预览被幂等缓存复用）
-const MAP_PREVIEW_VERSION = '8';
+const MAP_PREVIEW_VERSION = '10';
 
 // 导航脚本全局正则（与 recorder._sequentialRenumber 一致）：预览副本中清除原有跳转脚本
 const NAV_SCRIPT_REGEX = /<script>\s*\(function\(\)\s*\{[\s\S]*?var nextStep = "[^"]*";[\s\S]*?\}\)\(\);\s*<\/script>/g;
@@ -223,24 +224,30 @@ function transformRecordingToMockConfig(recData) {
   const mainModules = recData.mainModules || [];
 
   const moduleList = mainModules.map((m) => {
-    const steps = flattenSteps([m]); // 仅当前主模块
-    const stepList = steps.map((step) => {
-      const marks = Array.isArray(step.marks) ? step.marks : [];
-      const firstMark = marks[0] || {};
-      const stepTitle = firstMark.subTitle || (step.elementIds && step.elementIds[0]) || '录制步骤';
-      const question = firstMark.mainTitle || firstMark.subTitle || '';
-      const position = firstMark.position || 'right';
+    // ★ 每个 subModule = 地图一个主步骤（右侧导航项；点击跳转该主步骤的子步骤 0）
+    const stepList = (m.subModules || []).map((subMod) => {
+      // ★ 每个 captured page（step）= 该主步骤下的一个子步骤（页面跳转），仅在气泡中体现，不在地图展开
+      const subStepList = (subMod.steps || []).map((snapshot) => {
+        const marks = Array.isArray(snapshot.marks) ? snapshot.marks : [];
+        const firstMark = marks[0] || {};
+        const stepTitle = firstMark.subTitle || (snapshot.elementIds && snapshot.elementIds[0]) || '录制步骤';
+        const question = firstMark.mainTitle || firstMark.subTitle || '';
+        const position = firstMark.position || 'right';
+        // ★ 是否展示「下一步」按钮：与录制选择一致（默认 true；用户取消勾选为 false）
+        const showNextStep = firstMark.showNextStep !== false;
+        return {
+          title: stepTitle,
+          content: question,
+          position: position,
+          showNextStep: showNextStep,
+        };
+      });
       return {
-        stepTitle: stepTitle,
-        introduction: { question: question, answer: question },
-        // 每个录制步骤 -> 地图一个子步骤节点（对应一个 stepN.html），1:1
-        subStepList: [
-          {
-            title: stepTitle,
-            content: question,
-            position: position,
-          },
-        ],
+        stepTitle: subMod.mainStepTitle || '演示主步骤',
+        stepName: subMod.mainStepTitle || '演示主步骤',
+        introduction: subMod.introduction || {},
+        // 子步骤（页面跳转），仅体现在气泡，不展开为地图层
+        subStepList: subStepList,
       };
     });
     return {
@@ -497,14 +504,16 @@ function sanitizeName(s) {
  * @param {{dirPath:string}} param dirPath 为录制场景目录（含 recording_data.json 与 step*.html）
  * @returns {Promise<{success:boolean, url?:string, mapDir?:string, stepsDir?:string, error?:string}>}
  */
-async function generateMapPreview({ dirPath } = {}) {
+async function generateMapPreview({ dirPath, outputDir } = {}) {
   try {
     if (!dirPath || !fs.existsSync(dirPath)) {
       return { success: false, error: '场景目录不存在: ' + dirPath };
     }
-    const recDataPath = path.join(dirPath, 'recording_data.json');
+    // ★ recording_data.json 已移出导出目录，改从 recordingsRoot 上一级的
+    //    recording-meta/<dirName>/ 读取（outputDir 即 recordingsRoot），并兼容旧版导出目录内文件。
+    const recDataPath = resolveRecordingDataPath(outputDir, path.basename(dirPath));
     if (!fs.existsSync(recDataPath)) {
-      return { success: false, error: '该场景没有 recording_data.json，无法生成地图预览（请先保存一次录制）' };
+      return { success: false, error: '该场景没有录制数据（recording-meta），无法生成地图预览（请先保存一次录制）' };
     }
     const recData = JSON.parse(fs.readFileSync(recDataPath, 'utf-8'));
 

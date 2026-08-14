@@ -91,7 +91,11 @@ export function showDialog({ title, desc, buttons, width }) {
   return overlay;
 }
 
-/** ★ 环境配置对话框（仅 dev/prd，本地预览为默认功能无需选择） */
+/** ★ 环境配置对话框（dev / prd 二选一）
+ *  - dev/prd：CSS/资源在「部署态」使用带域名的绝对地址（与 HTML 自身地址一致），
+ *    在「应用内预览（file://）」时由注入的运行时脚本自动回退为相对地址，
+ *    因此测试/生产两种环境都能在应用内正常预览（与 nextStep 导航脚本的 file→相对/否则→全域名 逻辑一致）。
+ */
 export function showEnvConfigDialog(defaultSceneCode) {
   return new Promise((resolve) => {
     const ENV_URLS = {
@@ -105,19 +109,19 @@ export function showEnvConfigDialog(defaultSceneCode) {
 
     dialog.appendChild(el('div', 'dialog-title', '资源配置'));
 
-    // 提示：本地预览为默认功能
-    const hint = el('div', 'dialog-desc', '本地预览为默认功能，无需选择。请选择远端部署环境：');
+    // 提示：测试/生产均可在应用内预览
+    const hint = el('div', 'dialog-desc', '请选择部署环境。测试/生产环境在部署时使用带域名的绝对地址；在应用内预览时会自动回退为相对地址，因此两种环境都能正常预览：');
     hint.style.fontSize = '11px';
     hint.style.color = 'var(--text-muted)';
     hint.style.marginBottom = '12px';
     dialog.appendChild(hint);
 
-    // 环境选择（仅 dev / prd）
+    // 环境选择（dev / prd）
     dialog.appendChild(labelEl('选择环境', true));
     const envGroup = el('div', 'env-radio-group');
 
     const envs = [
-      { value: 'dev', label: '🔧 开发环境 (dev)' },
+      { value: 'dev', label: '🔧 测试环境 (dev)' },
       { value: 'prd', label: '🚀 生产环境 (prd)' },
     ];
 
@@ -140,15 +144,17 @@ export function showEnvConfigDialog(defaultSceneCode) {
     });
     dialog.appendChild(envGroup);
 
-    // 场景码输入
-    dialog.appendChild(labelEl('场景码', true));
-    const sceneCodeInput = el('input', 'dialog-input');
-    sceneCodeInput.type = 'text';
-    sceneCodeInput.value = defaultSceneCode || '';
-    sceneCodeInput.placeholder = '请输入场景码';
-    sceneCodeInput.style.fontFamily = "'Courier New', monospace";
-    sceneCodeInput.addEventListener('input', updateUrlPreview);
-    dialog.appendChild(sceneCodeInput);
+    // ★ 场景码（系统自动生成，无需用户填写，仅展示）
+    dialog.appendChild(labelEl('场景码（自动生成）', false));
+    const codeDisplay = el('div', 'env-scene-code-display', defaultSceneCode || 'sen_code_******');
+    codeDisplay.style.fontFamily = "'Courier New', monospace";
+    codeDisplay.style.padding = '6px 10px';
+    codeDisplay.style.background = 'var(--bg-secondary, #f3f4f6)';
+    codeDisplay.style.borderRadius = '6px';
+    codeDisplay.style.fontSize = '13px';
+    codeDisplay.style.color = 'var(--text-secondary)';
+    codeDisplay.style.letterSpacing = '0.5px';
+    dialog.appendChild(codeDisplay);
 
     // URL 预览
     const previewLabel = el('div', 'field-label', 'URL 预览');
@@ -158,9 +164,12 @@ export function showEnvConfigDialog(defaultSceneCode) {
     dialog.appendChild(previewBox);
 
     function updateUrlPreview() {
-      const code = sceneCodeInput.value.trim() || '场景码';
+      const code = defaultSceneCode || '场景码';
       const base = ENV_URLS[selectedEnv];
-      previewBox.textContent = '远端: ' + base + code + '/step1.html\n本地: ./step1.html (默认可用)';
+      previewBox.textContent =
+        '环境: ' + selectedEnv + '\n' +
+        'HTML:  ' + base + code + '/step1.html\n' +
+        'CSS:   ' + base + code + '/step1.css  (部署用绝对地址；应用内预览自动回退为相对)';
       previewBox.style.whiteSpace = 'pre-wrap';
     }
     updateUrlPreview();
@@ -209,10 +218,9 @@ export function showEnvConfigDialog(defaultSceneCode) {
 
     const confirmBtn = el('button', 'dialog-confirm-btn blue', '确认');
     confirmBtn.addEventListener('click', () => {
-      const sceneCode = sceneCodeInput.value.trim();
+      const sceneCode = (defaultSceneCode || '').trim();
       if (!sceneCode) {
-        sceneCodeInput.style.borderColor = 'var(--accent-red)';
-        sceneCodeInput.focus();
+        showToast('场景码未生成，请重试', 'error', 3000);
         return;
       }
       closeWith('confirm', {
@@ -228,6 +236,6 @@ export function showEnvConfigDialog(defaultSceneCode) {
     // ★ 防御：防止叠加 — 先清理已有的 dialog overlay
     document.querySelectorAll('.dialog-overlay').forEach((o) => o.remove());
     document.body.appendChild(overlay);
-    setTimeout(() => sceneCodeInput.focus(), 50);
+    setTimeout(() => { if (confirmBtn) confirmBtn.focus(); }, 50);
   });
 }

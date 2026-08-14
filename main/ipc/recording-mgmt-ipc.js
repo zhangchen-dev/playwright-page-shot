@@ -322,7 +322,7 @@ function registerRecordingMgmtIpc({ recorder, panelWindowGetter }) {
       const oldOrigin = ENV_URLS.dev + sceneCode + '/';
       const newOrigin = ENV_URLS.prd + newName + '/';
 
-      // 更新 HTML 文件中的 originName
+      // 更新 HTML 文件中的 originName 与资源（CSS/iframe）绝对地址
       const files = fs.readdirSync(destDir);
       for (const file of files) {
         if (file.endsWith('.html')) {
@@ -333,6 +333,8 @@ function registerRecordingMgmtIpc({ recorder, panelWindowGetter }) {
             /var originName = "[^"]*";/,
             'var originName = "' + newOrigin + '";'
           );
+          // ★ 同步替换带域名的 CSS/iframe 资源引用（与保存时 _applyRuntimeResourceUrls 一致，loader 内嵌的 origin 字面量会被一并替换）
+          content = content.split(oldOrigin).join(newOrigin);
           fs.writeFileSync(filePath, content, 'utf-8');
         }
       }

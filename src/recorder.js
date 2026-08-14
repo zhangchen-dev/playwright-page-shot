@@ -146,24 +146,16 @@ class Recorder {
   }
 
   _startRecording(msg) {
-    const { sceneTitle, sceneSubTitle, sceneName, sceneCode, sceneCodeSuffix } = msg;
-    if (!sceneTitle || !sceneName) {
-      return { stateChanged: false, response: { type: 'error', message: '场景主标题和名称为必填项' } };
+    const { sceneTitle, sceneSubTitle, sceneName } = msg;
+    // ★ 场景名称 == 场景主标题：前端不再单独传 sceneName，缺失时以 sceneTitle 兜底
+    const resolvedSceneName = sceneName || sceneTitle;
+    if (!sceneTitle || !resolvedSceneName) {
+      return { stateChanged: false, response: { type: 'error', message: '场景主标题为必填项' } };
     }
-    // ★ 场景码校验：仅允许字母、数字、下划线、中划线（不含汉字/特殊字符）
-    //   场景码会作为导出目录名与演示地址的一部分，必须是安全字符集
-    //   场景名称为展示名称，可输入任意文本，仅做必填校验
-    if (sceneCode && !/^[a-zA-Z0-9_-]+$/.test(sceneCode)) {
-      return {
-        stateChanged: false,
-        response: { type: 'error', message: '场景码只能包含字母、数字、下划线、中划线，不能包含汉字或特殊字符' },
-      };
-    }
-    const codeBase = sceneCode || sceneName;
-    this.sceneConfig = { sceneTitle, sceneSubTitle: sceneSubTitle || '', sceneName };
-    // ★ 场景码 = 用户输入 + "-" + 4 位随机（数字+字母），仅生成一次、全程保持不变
-    //   sceneCodeSuffix 由录制面板生成并传入，保证 UI 实时展示的场景码与最终一致
-    this.sceneCode = codeBase + '-' + (sceneCodeSuffix || this._genRandomSuffix(4));
+    this.sceneConfig = { sceneTitle, sceneSubTitle: sceneSubTitle || '', sceneName: resolvedSceneName };
+    // ★ 场景码由系统直接生成：sen_code_ + 6 位随机（仅数字+字母，与 _genRandomSuffix 同规则）
+    //   仅生成一次、全程保持不变，无需用户填写
+    this.sceneCode = 'sen_code_' + this._genRandomSuffix(6);
     this.mainModules = [{
       mainModuleName: '',
       mainModuleDesc: '',
@@ -178,7 +170,7 @@ class Recorder {
     this.phase = 'recording';
     this.resourceBaseUrl = '';
     this.pageMarks.clear();
-    console.log(`[Recorder] 开始录制: ${sceneTitle} (${sceneName})`);
+    console.log(`[Recorder] 开始录制: ${sceneTitle} (${resolvedSceneName})`);
     this._notifyStateChange();
     return { stateChanged: true };
   }
@@ -468,6 +460,8 @@ class Recorder {
       if (this.environment !== 'local' && this.envBaseUrl) {
         const originName = this.envBaseUrl + this.sceneCode + '/';
         this._injectOriginName(originName);
+        // ★ 同源：把 CSS <link> 改为「运行时判定」加载（file:// 相对 / 否则全域名，与 nextStep 导航一致）
+        this._applyRuntimeResourceUrls(originName);
       }
 
       const exporter = new Exporter({ outputDir: this.outputDir });
@@ -990,34 +984,42 @@ class Recorder {
     console.log('[Recorder] originName 已注入:', originName);
   }
 
-  _applyResourceBaseUrl(baseUrl) {
-    if (!baseUrl) return;
+  /**
+   * ★ 把 HTML 中「相对」的 CSS <link> 改为「运行时判定」加载（与 nextStep 导航脚本逻辑一致）：
+   *    - file://（本地预览）→ 继续用相对 './stepX.css'
+   *    - http/https（已部署）→ 改用 originName + stepX.css 的全域名地址
+   * 因此同一个保存产物既能本地 file:// 预览，也能部署到远端正常使用，无需二次处理。
+   * ★ 注意：iframe 的 src 保持相对（同目录，两种协议都解析正确），此处不改写，
+   *   以免破坏 file:// 预览。仅处理主步骤的 CSS <link>。
+   * 仅在远端环境（dev/prd）保存时、_fixStepNavigationLinks（重编号→cssFile 已定稿）之后调用。
+   */
+  _applyRuntimeResourceUrls(originName) {
+    if (!originName) return; // 本地环境：保持相对 <link>，file:// 预览即用
+    if (!originName.endsWith('/')) originName += '/';
+
+    // 仅匹配由 html-capture 生成的相对 CSS 链接：<link rel="stylesheet" href="./stepX.css">
+    const CSS_LINK_REGEX = /<link\s+rel="stylesheet"\s+href="\.\/([^"]+\.css)"\s*\/?>/gi;
+
     for (const mainMod of this.mainModules) {
       for (const subMod of mainMod.subModules) {
         if (!subMod.steps) continue;
         for (const snapshot of subMod.steps) {
-          const cssFilePattern = './' + snapshot.cssFile;
-          if (snapshot.htmlContent.includes(cssFilePattern)) {
-            snapshot.htmlContent = snapshot.htmlContent.split(cssFilePattern).join(baseUrl + '/' + snapshot.cssFile);
-          }
-          if (snapshot.nextStepId) {
-            const navPattern = '"./" + nextStep + ".html"';
-            const navReplacement = '"' + baseUrl + '/" + nextStep + ".html"';
-            if (snapshot.htmlContent.includes(navPattern)) {
-              snapshot.htmlContent = snapshot.htmlContent.split(navPattern).join(navReplacement);
-            }
-          }
-          if (snapshot.iframeFiles) {
-            for (const iframe of snapshot.iframeFiles) {
-              const iframeSrcPattern = './' + iframe.filename;
-              if (snapshot.htmlContent.includes(iframeSrcPattern)) {
-                snapshot.htmlContent = snapshot.htmlContent.split(iframeSrcPattern).join(baseUrl + '/' + iframe.filename);
-              }
-            }
-          }
+          if (!snapshot.htmlContent) continue;
+          const cssFile = snapshot.cssFile;
+          if (!cssFile) continue;
+          // 运行时判定脚本：解析结果用 document.write 同步注入 <link>，无样式闪烁
+          const loaderScript =
+            '<script>(function(){' +
+            'var __R_ORIGIN__="' + originName + '";' +
+            'var __R_CSS__="' + cssFile + '";' +
+            'var __R_HREF__=(window.location.protocol===\'file:\'||!__R_ORIGIN__)?(\'./\'+__R_CSS__):(__R_ORIGIN__+__R_CSS__);' +
+            'document.write(\'<link rel="stylesheet" href="\'+__R_HREF__+\'">\');' +
+            '})();</' + 'script>';
+          snapshot.htmlContent = snapshot.htmlContent.replace(CSS_LINK_REGEX, loaderScript);
         }
       }
     }
+    console.log('[Recorder] CSS 链接已改为运行时判定（file:// 相对 / 否则全域名）:', originName);
   }
 }
 

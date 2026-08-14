@@ -76,12 +76,20 @@ export async function handleEndAndSave() {
   }
 
   // ★ 使用环境配置对话框
-  //   - defaultSceneCode 优先使用 state.sceneCode（来自继续录制）
-  //   - 兜底使用 sceneName（来自继续录制的 sceneConfig）
-  //   - 再兜底使用当前时间戳生成的临时场景码（避免空字符串卡死）
+  //   - defaultSceneCode 优先使用 state.sceneCode（正常录制已由后端生成 sen_code_ 场景码）
+  //   - 兜底使用 sceneTitle / sceneName（来自继续录制的 sceneConfig，二者已合并）
+  //   - 再兜底使用 sen_code_ + 6 位随机（与后端 _genRandomSuffix 同规则，避免空字符串卡死）
+  const genFallbackSceneCode = () => {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let s = '';
+    for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)];
+    return 'sen_code_' + s;
+  };
+  const cfg = appState.state.sceneConfig || {};
   const fallbackCode = appState.state.sceneCode
-    || (appState.state.sceneConfig && appState.state.sceneConfig.sceneName)
-    || ('REC_' + Date.now().toString(36).toUpperCase().slice(-6));
+    || cfg.sceneTitle
+    || cfg.sceneName
+    || genFallbackSceneCode();
   const envConfig = await showEnvConfigDialog(fallbackCode);
 
   // ★ 关键修复：用户取消（按 Esc / 点取消按钮 / 点遮罩）→ 直接退出保存流程

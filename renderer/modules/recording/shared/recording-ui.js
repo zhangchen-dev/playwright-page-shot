@@ -10,17 +10,6 @@ import { captureWebviewData, removeWebviewElementId } from '../internal/webview-
 import { doCompleteMark, handleEndAndSave, toggleSelectionMode } from './recording-actions.js';
 import { renderQuickLoginSection } from './credentials-ui.js';
 
-// ★ 生成 4 位随机码（数字+字母），与 recorder._genRandomSuffix 同规则，
-//   用于在录制面板提前生成场景码后缀，保证 UI 实时展示的场景码 == 最终场景码。
-function genSceneCodeSuffix() {
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let s = '';
-  for (let i = 0; i < 4; i++) {
-    s += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return s;
-}
-
 // ===== 渲染：配置阶段 =====
 export function renderConfigPhase() {
   contentEl.innerHTML = '';
@@ -52,52 +41,22 @@ export function renderConfigPhase() {
   });
   configBox.appendChild(subtitleField.wrapper);
 
-  // ★ 场景名称（展示名称，可输入任意文本，仅必填校验）
-  const nameField = formField({
-    label: '场景名称',
-    required: true,
-    placeholder: '例如：enterprise-login',
-    id: 'sceneNameInput',
-    value: appState.state.sceneConfig.sceneName,
-    hint: '必填，可输入任意文本（含中文），作为场景展示名称',
-  });
-  configBox.appendChild(nameField.wrapper);
-
-  // ★ 场景码（用户自定义）
-  const codeField = formField({
-    label: '场景码',
-    required: true,
-    placeholder: '例如：EL',
-    id: 'sceneCodeInput',
-    value: appState.state.sceneConfig.sceneCode,
-    hint: '必填，用于生成目录与演示地址，仅限字母、数字、下划线、中划线',
-    style: 'font-family: "Courier New", monospace; letter-spacing: 0.5px;',
-  });
-  configBox.appendChild(codeField.wrapper);
+  // ★ 场景码由系统自动生成（sen_code_ + 6 位随机），无需用户填写，此处仅作提示
+  const codeHint = el('div', 'code-preview');
+  codeHint.id = 'sceneCodePreview';
+  codeHint.style.marginTop = '4px';
+  codeHint.style.fontSize = '12px';
+  codeHint.style.color = 'var(--text-muted)';
+  codeHint.style.minHeight = '16px';
+  codeHint.textContent = '场景码由系统自动生成（格式：sen_code_ + 6 位随机字符）';
+  configBox.appendChild(codeHint);
 
   // ★ 提前取出各输入引用（必须在下方 updateCodePreview / addEventListener 之前声明，
   //   否则 const 的暂时性死区会触发 ReferenceError，导致整个配置面板渲染中断）
   const titleInput = titleField.input;
   const subtitleInput = subtitleField.input;
-  const nameInput = nameField.input;
-  const sceneCodeInput = codeField.input;
 
-  // ★ 实时展示最终场景码 = 用户输入 + "-" + 4 位随机码（用户输入完即展示）
-  const codeSuffix = genSceneCodeSuffix();
-  const codePreview = el('div', 'code-preview');
-  codePreview.id = 'sceneCodePreview';
-  codePreview.style.marginTop = '4px';
-  codePreview.style.fontSize = '12px';
-  codePreview.style.color = 'var(--accent-blue)';
-  codePreview.style.minHeight = '16px';
-  configBox.appendChild(codePreview);
-  function updateCodePreview() {
-    const base = sceneCodeInput.value.trim() || nameInput.value.trim();
-    codePreview.textContent = base ? ('最终场景码: ' + base + '-' + codeSuffix) : '';
-  }
-  sceneCodeInput.addEventListener('input', updateCodePreview);
-  nameInput.addEventListener('input', updateCodePreview);
-  updateCodePreview();
+  // ★ 场景码预览节点已在上方创建（codeHint），此处仅保留兼容引用
 
   contentEl.appendChild(configBox);
 
@@ -106,22 +65,12 @@ export function renderConfigPhase() {
   startBtn.id = 'startRecordingBtn';
 
   function updateStartBtn() {
-    // ★ 三个必填项都填了 + 浏览器已打开
-    const fieldsValid = !!(titleInput.value.trim() && nameInput.value.trim() && sceneCodeInput.value.trim());
-    // ★ 场景码（目录/演示地址标识）字符集校验：仅字母、数字、下划线、中划线
-    const codeValid = /^[a-zA-Z0-9_-]+$/.test(sceneCodeInput.value.trim());
-    startBtn.disabled = !fieldsValid || !appState.browserLaunched || !codeValid;
-    if (!appState.browserLaunched) {
-      startBtn.title = '请先在上方输入 URL 并打开浏览器';
-    } else if (!codeValid) {
-      startBtn.title = '场景码只能包含字母、数字、下划线、中划线';
-    } else {
-      startBtn.title = '';
-    }
+    // ★ 必填项：场景主标题 + 浏览器已打开（场景名称已合并到场景主标题）
+    const fieldsValid = !!(titleInput.value.trim());
+    startBtn.disabled = !fieldsValid || !appState.browserLaunched;
+    startBtn.title = appState.browserLaunched ? '' : '请先在上方输入 URL 并打开浏览器';
   }
   titleInput.addEventListener('input', updateStartBtn);
-  nameInput.addEventListener('input', updateStartBtn);
-  sceneCodeInput.addEventListener('input', updateStartBtn);
 
   // ★ 监听浏览器状态变化（打开/关闭）
   const browserWatcher = () => updateStartBtn();
@@ -141,20 +90,12 @@ export function renderConfigPhase() {
       return;
     }
     const title = titleInput.value.trim();
-    const name = nameInput.value.trim();
-    const code = sceneCodeInput.value.trim();
-    if (!title || !name || !code) return;
-    // ★ 二次校验场景码字符集（与后端一致）：仅字母、数字、下划线、中划线
-    if (!/^[a-zA-Z0-9_-]+$/.test(code)) {
-      showToast('场景码只能包含字母、数字、下划线、中划线，不能包含汉字或特殊字符', 'error', 4000);
-      return;
-    }
+    if (!title) return;
     sendAction('startRecording', {
       sceneTitle: title,
       sceneSubTitle: subtitleInput.value.trim(),
-      sceneName: name,
-      sceneCode: code, // ★ 传递场景码
-      sceneCodeSuffix: codeSuffix, // ★ 传递 UI 生成的随机后缀，保证展示==最终
+      // ★ 场景名称 == 场景主标题（后端会令 sceneName = sceneTitle），无需前端单独传入
+      // ★ 场景码由后端直接生成（sen_code_ + 6 位随机），无需前端传入
     });
   });
   contentEl.appendChild(startBtn);
@@ -244,12 +185,16 @@ export function renderRecordingPhase() {
   contentEl.appendChild(el('div', 'section-title', '当前模块'));
   const mainModuleBox = el('div', 'section-box');
 
+  // ★ 默认文案：模块主标题为空时自动填充“模块N”（N=当前模块序号，从1开始），
+  //   用户无需每次手填即可连续录制，后续可自己编辑
+  const mainModIdx = Math.max(0, appState.state.currentMainModuleIndex);
+  const mainModDefault = '模块' + (mainModIdx + 1);
   const mainModNameField = formField({
     label: '模块主标题',
     required: true,
     placeholder: '例如：登录认证',
     id: 'mainModNameInput',
-    value: currentMainMod ? currentMainMod.mainModuleName : '',
+    value: currentMainMod ? (currentMainMod.mainModuleName || mainModDefault) : mainModDefault,
   });
   mainModuleBox.appendChild(mainModNameField.wrapper);
 
@@ -295,12 +240,15 @@ export function renderRecordingPhase() {
   contentEl.appendChild(el('div', 'section-title', '当前主步骤'));
   const subModuleBox = el('div', 'section-box');
 
+  // ★ 默认文案：主步骤标题为空时自动填充“步骤N”（N=当前主步骤序号，从1开始），支持连续录制
+  const subModIdx = Math.max(0, appState.state.currentSubModuleIndex);
+  const subModDefault = '步骤' + (subModIdx + 1);
   const modNameField = formField({
     label: '主步骤标题',
     required: true,
     placeholder: '例如：输入账号密码',
     id: 'modNameInput',
-    value: currentSubMod ? currentSubMod.mainStepTitle : '',
+    value: currentSubMod ? (currentSubMod.mainStepTitle || subModDefault) : subModDefault,
   });
   subModuleBox.appendChild(modNameField.wrapper);
 
@@ -394,11 +342,13 @@ export function renderRecordingPhase() {
   markBtn.addEventListener('click', () => toggleSelectionMode());
   markRow.appendChild(markBtn);
 
+  // ★ 默认文案：未选中元素时自动填充“标记N”（N=当前步骤已标记数+1），减少每步输入
+  const markDefault = '标记' + ((appState.state.markedElements?.length || 0) + 1);
   const mainTitleField = formField({
     label: '',
     placeholder: '主标题 (mainTitle)',
     id: 'markMainTitleInput',
-    value: appState.selectedElementData ? (appState.selectedElementData.text || '') : '',
+    value: appState.selectedElementData ? (appState.selectedElementData.text || markDefault) : markDefault,
     style: 'margin-bottom: 0; flex: 1;',
   });
   mainTitleField.wrapper.style.flex = '1';

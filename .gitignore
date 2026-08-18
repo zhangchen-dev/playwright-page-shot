@@ -3,3 +3,5 @@ output/
 dist/
 *.log
 .DS_Store
+# 诊断/临时验证产物（asar 打包复现、playwright 诊断脚本等），不进仓库
+diag/

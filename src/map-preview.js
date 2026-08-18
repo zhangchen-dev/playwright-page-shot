@@ -142,6 +142,29 @@ const MAP_PREVIEW_VERSION = '11';
 const NAV_SCRIPT_REGEX = /<script>(?:(?!<\/script>)[\s\S])*?var nextStep\s*=\s*"[^"]*";(?:(?!<\/script>)[\s\S])*?\}\)\(\);\s*<\/script>/g;
 
 /**
+ * 从 asar 内「逐文件读取写出」式复制（替代 fs-extra.copy）。
+ * 背景（用户报障）：打包安装后源码位于 app.asar 内，fs-extra.copy 对 asar 内的【目录】
+ *   会触发 ENOENT（opendir 失败），表现就是「点击地图预览 → No such file or directory」，
+ *   且用户装到任何路径都会复现（与安装位置无关，纯粹是 asar 内目录复制不被 fs-extra 支持）。
+ * 本函数只用 readFileSync / readdirSync / statSync / writeFileSync，这三者 Electron 对 asar 全支持，
+ * 因此开发期（普通磁盘路径）与打包后（app.asar 内）均能稳定复制，用户任意安装位置都可用。
+ * @param {string} src  源文件或目录（可位于 app.asar 内）
+ * @param {string} dest 目标路径（写入系统临时目录，真实磁盘）
+ */
+function copyAsarSafe(src, dest) {
+  const st = fs.statSync(src);
+  if (st.isDirectory()) {
+    fs.mkdirpSync(dest);
+    for (const name of fs.readdirSync(src)) {
+      copyAsarSafe(path.join(src, name), path.join(dest, name));
+    }
+  } else {
+    fs.mkdirpSync(path.dirname(dest));
+    fs.writeFileSync(dest, fs.readFileSync(src));
+  }
+}
+
+/**
  * 地图预览「等比缩放（fit）」注入：让嵌入的录制步骤页面随窗口/容器大小整体缩放。
  * 背景：iframe 元素本身已 width/height:100% 跟随容器，但 iframe 内部的录制页面按固定设计宽度
  *       渲染（如 1280px 宽的页面壳），放进 iframe 后不会整体缩放，导致「地图外壳变、内嵌页面不变」。
@@ -465,8 +488,8 @@ function copyLocalRefs(html, srcDir, destDir, _seen) {
     const destFile = path.join(destDir, rel);
     try {
       if (fs.existsSync(srcFile)) {
-        fs.ensureDirSync(path.dirname(destFile));
-        fs.copySync(srcFile, destFile);
+        // 用 copyAsarSafe 逐文件写出（不依赖 fs.copy 目录复制，避免 asar 环境下的 ENOENT 隐患）
+        copyAsarSafe(srcFile, destFile);
         // 递归：被复制的若是本地 HTML（如 iframe），其内部 ./ 引用也一并带过来
         if (/\.html?$/i.test(rel)) {
           const childHtml = fs.readFileSync(destFile, 'utf-8');
@@ -562,13 +585,17 @@ async function generateMapPreview({ dirPath, outputDir } = {}) {
     await fs.ensureDir(stepsDir);
 
     // 3) 复制静态地图页模板（index.html / app.js / styles.css / img）
-    await fs.copy(path.join(MAP_TEMPLATE_DIR, 'index.html'), path.join(mapDir, 'index.html'));
-    await fs.copy(path.join(MAP_TEMPLATE_DIR, 'app.js'), path.join(mapDir, 'app.js'));
-    await fs.copy(path.join(MAP_TEMPLATE_DIR, 'styles.css'), path.join(mapDir, 'styles.css'));
+    // ⚠️ 必须用「逐文件读取写出」(copyAsarSafe)，不能直接 fs.copy 目录：
+    // 打包安装后代码在 app.asar 内，fs-extra.copy 对 asar 内目录会 ENOENT（opendir 失败），
+    // 表现为「地图预览报错 No such file or directory」。copyAsarSafe 仅用 Electron 对 asar 全支持的 API，
+    // 开发期与打包后、任意安装位置均稳定。
+    copyAsarSafe(path.join(MAP_TEMPLATE_DIR, 'index.html'), path.join(mapDir, 'index.html'));
+    copyAsarSafe(path.join(MAP_TEMPLATE_DIR, 'app.js'), path.join(mapDir, 'app.js'));
+    copyAsarSafe(path.join(MAP_TEMPLATE_DIR, 'styles.css'), path.join(mapDir, 'styles.css'));
     // 注：步骤气泡已在预览副本内自实现（buildAutouseBootstrapScript），不再复制/加载 xft-help-autouse.js 引擎。
     const imgSrc = path.join(MAP_TEMPLATE_DIR, 'img');
     if (fs.existsSync(imgSrc)) {
-      await fs.copy(imgSrc, path.join(mapDir, 'img'));
+      copyAsarSafe(imgSrc, path.join(mapDir, 'img'));
     }
 
     // 4) 将 window.MockData 内联进复制后的 index.html，并保留 app.js 加载（复用现有逻辑，不改模板）
@@ -617,7 +644,7 @@ async function generateMapPreview({ dirPath, outputDir } = {}) {
       const stepName = (step.htmlFile || ('step' + (i + 1) + '.html')).replace(/\.html?$/i, '');
       const cssSrc = path.join(dirPath, stepName + '.css');
       if (fs.existsSync(cssSrc)) {
-        try { fs.copySync(cssSrc, path.join(stepsDir, 'step' + (i + 1) + '.css')); } catch (e) {}
+        try { copyAsarSafe(cssSrc, path.join(stepsDir, 'step' + (i + 1) + '.css')); } catch (e) {}
       }
       // 把步骤 HTML 内部引用的本地资源（iframe / css / 图片等）一并复制到临时目录，避免 ERR_FILE_NOT_FOUND
       copyLocalRefs(html, dirPath, stepsDir);

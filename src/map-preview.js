@@ -131,10 +131,15 @@ const AUTOUSE_BUBBLE_CSS = `.xftautouseplugin-tour-guide {
 
 // 预览模板版本标记：模板/注入逻辑有结构性变更时 +1，使旧缓存目录自动失效、强制重建
 // （避免用户之前生成的"缺 #globalTool 导致 init 崩溃"或"旧版加载 SDK 气泡"的旧预览被幂等缓存复用）
-const MAP_PREVIEW_VERSION = '10';
+// 11: 修复 stripNavScripts 正则跨 </script> 吞掉整个 body 正文，导致地图预览中间区域空白
+const MAP_PREVIEW_VERSION = '11';
 
 // 导航脚本全局正则（与 recorder._sequentialRenumber 一致）：预览副本中清除原有跳转脚本
-const NAV_SCRIPT_REGEX = /<script>\s*\(function\(\)\s*\{[\s\S]*?var nextStep = "[^"]*";[\s\S]*?\}\)\(\);\s*<\/script>/g;
+// ⚠️ 关键约束：正则必须限定在【单个 <script> 标签内】，用 (?:(?!<\/script>)[\s\S])*? 阻止跨 </script> 匹配。
+// 否则会从文档第一个 <script>（如录制页 head 里的资源定位脚本 __R_ORIGIN__）一路匹配到 body 内的跳转脚本，
+// 把 </head> 与整个 body 正文一并删除，表现为「地图预览中间页面空白、仅右侧地图配置可见」。
+// 同时把 var nextStep = 的等号两侧空格放宽（\s*=\s*），兼容更多录制产物写法。
+const NAV_SCRIPT_REGEX = /<script>(?:(?!<\/script>)[\s\S])*?var nextStep\s*=\s*"[^"]*";(?:(?!<\/script>)[\s\S])*?\}\)\(\);\s*<\/script>/g;
 
 /**
  * 地图预览「等比缩放（fit）」注入：让嵌入的录制步骤页面随窗口/容器大小整体缩放。
@@ -607,6 +612,13 @@ async function generateMapPreview({ dirPath, outputDir } = {}) {
         html += injection;
       }
       fs.writeFileSync(path.join(stepsDir, 'step' + (i + 1) + '.html'), html, 'utf-8');
+      // 复制与步骤同名的 css（录制页常通过 document.write('./stepN.css') 动态注入样式，
+      // 不是静态 ./ 引用，copyLocalRefs 抓不到；不复制则地图预览的步骤页缺失样式、看起来"没加载出来"）
+      const stepName = (step.htmlFile || ('step' + (i + 1) + '.html')).replace(/\.html?$/i, '');
+      const cssSrc = path.join(dirPath, stepName + '.css');
+      if (fs.existsSync(cssSrc)) {
+        try { fs.copySync(cssSrc, path.join(stepsDir, 'step' + (i + 1) + '.css')); } catch (e) {}
+      }
       // 把步骤 HTML 内部引用的本地资源（iframe / css / 图片等）一并复制到临时目录，避免 ERR_FILE_NOT_FOUND
       copyLocalRefs(html, dirPath, stepsDir);
     }

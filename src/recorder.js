@@ -150,7 +150,7 @@ class Recorder {
     // ★ 场景名称 == 场景主标题：前端不再单独传 sceneName，缺失时以 sceneTitle 兜底
     const resolvedSceneName = sceneName || sceneTitle;
     if (!sceneTitle || !resolvedSceneName) {
-      return { stateChanged: false, response: { type: 'error', message: '场景主标题为必填项' } };
+      return { stateChanged: false, response: { type: 'error', message: '解决方案主标题为必填项' } };
     }
     this.sceneConfig = { sceneTitle, sceneSubTitle: sceneSubTitle || '', sceneName: resolvedSceneName };
     // ★ 场景码由系统直接生成：sen_code_ + 6 位随机（仅数字+字母，与 _genRandomSuffix 同规则）

@@ -19,12 +19,12 @@ export function renderConfigPhase() {
   appState.markShowNext = true;
   appState.markPosition = 'right';
 
-  contentEl.appendChild(el('div', 'section-title', '场景配置'));
+  contentEl.appendChild(el('div', 'section-title', '解决方案配置'));
   const configBox = el('div', 'section-box');
 
   // ★ 场景主标题
   const titleField = formField({
-    label: '场景主标题',
+    label: '解决方案主标题',
     required: true,
     placeholder: '例如：企业网银登录流程',
     id: 'sceneTitleInput',
@@ -34,7 +34,7 @@ export function renderConfigPhase() {
 
   // ★ 场景副标题
   const subtitleField = formField({
-    label: '场景副标题',
+    label: '解决方案副标题',
     placeholder: '选填，例如：支持指纹/人脸登录',
     id: 'sceneSubTitleInput',
     value: appState.state.sceneConfig.sceneSubTitle,
@@ -190,7 +190,7 @@ export function renderRecordingPhase() {
   const mainModIdx = Math.max(0, appState.state.currentMainModuleIndex);
   const mainModDefault = '模块' + (mainModIdx + 1);
   const mainModNameField = formField({
-    label: '模块主标题',
+    label: '地图-场景主标题',
     required: true,
     placeholder: '例如：登录认证',
     id: 'mainModNameInput',
@@ -199,7 +199,7 @@ export function renderRecordingPhase() {
   mainModuleBox.appendChild(mainModNameField.wrapper);
 
   const mainModDescField = formField({
-    label: '模块描述',
+    label: '地图-场景副标题',
     placeholder: '选填，例如：用户输入账号密码并登录',
     id: 'mainModDescInput',
     value: currentMainMod ? currentMainMod.mainModuleDesc : '',
@@ -244,7 +244,7 @@ export function renderRecordingPhase() {
   const subModIdx = Math.max(0, appState.state.currentSubModuleIndex);
   const subModDefault = '步骤' + (subModIdx + 1);
   const modNameField = formField({
-    label: '主步骤标题',
+    label: '地图-主任务步骤',
     required: true,
     placeholder: '例如：输入账号密码',
     id: 'modNameInput',
@@ -266,16 +266,16 @@ export function renderRecordingPhase() {
   introBox.style.display = hasIntro ? 'block' : 'none';
 
   const introQuestionField = formField({
-    label: '问题 (question)',
-    placeholder: '例如：为什么需要登录？',
+    label: '右下角场景故事主标',
+    placeholder: '例如：本方案要解决的核心问题',
     id: 'introQuestionInput',
     value: hasIntro ? (currentSubMod.introduction.question || '') : '',
   });
   introBox.appendChild(introQuestionField.wrapper);
 
   const introAnswerField = formField({
-    label: '答案 (answer)',
-    placeholder: '例如：登录后才能查看账户信息',
+    label: '右下角场景故事副标',
+    placeholder: '例如：方案带来的业务价值',
     id: 'introAnswerInput',
     value: hasIntro ? (currentSubMod.introduction.answer || '') : '',
   });
@@ -368,7 +368,7 @@ export function renderRecordingPhase() {
 
   // 副标题
   const subTitleField = formField({
-    label: '副标题 (title)',
+    label: '气泡指引副标题',
     placeholder: '选填，例如：点击登录按钮',
     id: 'markSubTitleInput',
   });

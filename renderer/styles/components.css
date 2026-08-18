@@ -604,20 +604,6 @@ select.input-field option {
   cursor: pointer;
 }
 
-.env-url-preview {
-  margin-top: 8px;
-  padding: 10px 12px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  color: var(--accent-blue-light);
-  word-break: break-all;
-  line-height: 1.6;
-  margin-bottom: 16px;
-  font-family: 'Courier New', monospace;
-}
-
 /* ===== ★ Toast 通知 ===== */
 
 .toast-container {

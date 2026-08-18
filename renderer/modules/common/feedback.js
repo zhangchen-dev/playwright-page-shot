@@ -136,7 +136,6 @@ export function showEnvConfigDialog(defaultSceneCode) {
       radio.checked = env.value === 'dev';
       radio.addEventListener('change', () => {
         selectedEnv = env.value;
-        updateUrlPreview();
       });
       radioLabel.appendChild(radio);
       radioLabel.appendChild(el('span', '', env.label));
@@ -155,24 +154,6 @@ export function showEnvConfigDialog(defaultSceneCode) {
     codeDisplay.style.color = 'var(--text-secondary)';
     codeDisplay.style.letterSpacing = '0.5px';
     dialog.appendChild(codeDisplay);
-
-    // URL 预览
-    const previewLabel = el('div', 'field-label', 'URL 预览');
-    previewLabel.style.marginTop = '12px';
-    dialog.appendChild(previewLabel);
-    const previewBox = el('div', 'env-url-preview');
-    dialog.appendChild(previewBox);
-
-    function updateUrlPreview() {
-      const code = defaultSceneCode || '场景码';
-      const base = ENV_URLS[selectedEnv];
-      previewBox.textContent =
-        '环境: ' + selectedEnv + '\n' +
-        'HTML:  ' + base + code + '/step1.html\n' +
-        'CSS:   ' + base + code + '/step1.css  (部署用绝对地址；应用内预览自动回退为相对)';
-      previewBox.style.whiteSpace = 'pre-wrap';
-    }
-    updateUrlPreview();
 
     // 按钮
     const btnRow = el('div', 'dialog-btn-row');

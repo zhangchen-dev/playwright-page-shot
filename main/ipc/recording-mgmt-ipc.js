@@ -356,6 +356,26 @@ function registerRecordingMgmtIpc({ recorder, panelWindowGetter }) {
         fs.writeFileSync(configPath, configContent, 'utf-8');
       }
 
+      // ★ 同步录制元数据（recording_data.json），使同步后的副本支持
+      //    继续录制、重录、地图预览等依赖录制数据的功能。
+      //    同时把其中的 sceneCode 更新为新场景名，避免地图预览/重录时引用旧场景码。
+      const originalMetaDir = path.join(path.dirname(recordingsRoot), 'recording-meta', originalName);
+      const newMetaDir = path.join(path.dirname(recordingsRoot), 'recording-meta', newName);
+      const originalRecordingData = path.join(originalMetaDir, 'recording_data.json');
+      if (fs.existsSync(originalRecordingData)) {
+        await fs.promises.mkdir(newMetaDir, { recursive: true });
+        const rd = JSON.parse(fs.readFileSync(originalRecordingData, 'utf-8'));
+        rd.sceneCode = newName;
+        await fs.promises.writeFile(
+          path.join(newMetaDir, 'recording_data.json'),
+          JSON.stringify(rd),
+          'utf-8'
+        );
+        console.log('[IPC] sync-to-prd 已同步录制元数据: %s -> %s', originalName, newName);
+      } else {
+        console.warn('[IPC] sync-to-prd 原场景无录制元数据，跳过同步:', originalName);
+      }
+
       console.log('[IPC] sync-to-prd 完成: %s -> %s', originalName, newName);
       return { success: true, newDirPath: destDir, newName: newName };
     } catch (err) {

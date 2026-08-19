@@ -256,7 +256,7 @@ export function renderRecordingPhase() {
   const introToggleRow = el('div', 'intro-toggle-row');
   const introToggleBtn = el('button', 'btn btn-link btn-sm');
   const hasIntro = currentSubMod && currentSubMod.introduction;
-  introToggleBtn.textContent = hasIntro ? '▼ 收起介绍' : '▶ 添加介绍 (introduction)';
+  introToggleBtn.textContent = hasIntro ? '▼ 收起当前主流程故事' : '▶ 添加当前主流程故事';
   introToggleBtn.id = 'introToggleBtn';
   subModuleBox.appendChild(introToggleRow);
   introToggleRow.appendChild(introToggleBtn);
@@ -265,11 +265,17 @@ export function renderRecordingPhase() {
   introBox.id = 'introBox';
   introBox.style.display = hasIntro ? 'block' : 'none';
 
+  // ★ 跨重渲染保留 intro 草稿：录制中标记元素/捕获步骤会触发 rerenderPanel 重建面板，
+  //    直接读 currentSubMod.introduction（此时尚未保存，为 null）会把已输入文案清空。
+  //    故用 savedInputValues 按「主步骤+子步骤」索引暂存，重渲染后回填输入框。
+  const introKey = appState.state.currentMainModuleIndex + '_' + appState.state.currentSubModuleIndex;
+  const introDraft = appState.savedInputValues['intro_' + introKey] || {};
+
   const introQuestionField = formField({
     label: '右下角场景故事主标',
     placeholder: '例如：本方案要解决的核心问题',
     id: 'introQuestionInput',
-    value: hasIntro ? (currentSubMod.introduction.question || '') : '',
+    value: hasIntro ? (currentSubMod.introduction.question || '') : (introDraft.question || ''),
   });
   introBox.appendChild(introQuestionField.wrapper);
 
@@ -277,7 +283,7 @@ export function renderRecordingPhase() {
     label: '右下角场景故事副标',
     placeholder: '例如：方案带来的业务价值',
     id: 'introAnswerInput',
-    value: hasIntro ? (currentSubMod.introduction.answer || '') : '',
+    value: hasIntro ? (currentSubMod.introduction.answer || '') : (introDraft.answer || ''),
   });
   introBox.appendChild(introAnswerField.wrapper);
 
@@ -286,10 +292,25 @@ export function renderRecordingPhase() {
   const introQuestionInput = introQuestionField.input;
   const introAnswerInput = introAnswerField.input;
 
+  // ★ 实时把 intro 输入写入 savedInputValues 草稿，避免面板重渲染导致文案丢失
+  //    （recorder 的 mainModules 经深拷贝同步到 renderer，oninput 直接改 state 不会进导出，
+  //     最终仍由 collectIntroduction → 保存动作写入 recorder.subMod.introduction）
+  function persistIntroDraft() {
+    const q = introQuestionInput ? introQuestionInput.value.trim() : '';
+    const a = introAnswerInput ? introAnswerInput.value.trim() : '';
+    if (!q && !a) {
+      delete appState.savedInputValues['intro_' + introKey];
+    } else {
+      appState.savedInputValues['intro_' + introKey] = { question: q, answer: a };
+    }
+  }
+  if (introQuestionInput) introQuestionInput.addEventListener('input', persistIntroDraft);
+  if (introAnswerInput) introAnswerInput.addEventListener('input', persistIntroDraft);
+
   introToggleBtn.addEventListener('click', () => {
     const isVisible = introBox.style.display !== 'none';
     introBox.style.display = isVisible ? 'none' : 'block';
-    introToggleBtn.textContent = isVisible ? '▶ 添加介绍 (introduction)' : '▼ 收起介绍';
+    introToggleBtn.textContent = isVisible ? '▶ 添加当前主流程故事' : '▼ 收起当前主流程故事';
   });
 
   // ★ 新增主步骤按钮放在主步骤区域内
@@ -509,11 +530,8 @@ export function renderRecordingPhase() {
   // ★ 录制记录已移至右栏（renderRightSteps）
 }
 
-/** ★ 收集 introduction 数据 */
+/** ★ 收集 introduction 数据（直接读输入框，不依赖折叠状态，避免重渲染后空白被判为空） */
 export function collectIntroduction() {
-  const introBox = document.getElementById('introBox');
-  if (!introBox || introBox.style.display === 'none') return null;
-
   const questionInput = document.getElementById('introQuestionInput');
   const answerInput = document.getElementById('introAnswerInput');
   const question = questionInput ? questionInput.value.trim() : '';

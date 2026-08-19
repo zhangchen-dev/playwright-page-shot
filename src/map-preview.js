@@ -132,7 +132,7 @@ const AUTOUSE_BUBBLE_CSS = `.xftautouseplugin-tour-guide {
 // 预览模板版本标记：模板/注入逻辑有结构性变更时 +1，使旧缓存目录自动失效、强制重建
 // （避免用户之前生成的"缺 #globalTool 导致 init 崩溃"或"旧版加载 SDK 气泡"的旧预览被幂等缓存复用）
 // 11: 修复 stripNavScripts 正则跨 </script> 吞掉整个 body 正文，导致地图预览中间区域空白
-const MAP_PREVIEW_VERSION = '11';
+const MAP_PREVIEW_VERSION = '13';
 
 // 导航脚本全局正则（与 recorder._sequentialRenumber 一致）：预览副本中清除原有跳转脚本
 // ⚠️ 关键约束：正则必须限定在【单个 <script> 标签内】，用 (?:(?!<\/script>)[\s\S])*? 阻止跨 </script> 匹配。
@@ -286,11 +286,17 @@ function transformRecordingToMockConfig(recData) {
     };
   });
 
+  // ★ 任意主步骤含非空「场景故事」文案时，地图预览自动在右下角展示（用户无需手动点「场景故事」按钮）
+  const hasSceneStory = moduleList.some((m) =>
+    (m.stepList || []).some((s) => s.introduction && (s.introduction.question || s.introduction.answer)),
+  );
+
   return {
     demonstrationCode: sceneCode,
     demonstrationTitle: sceneConfig.sceneTitle || sceneCode,
     demonstrationSubTitle: sceneConfig.sceneSubTitle || '',
     demonstrationHeaderNavTitle: '',
+    sceneStoryShow: hasSceneStory,
     moduleList: moduleList,
   };
 }

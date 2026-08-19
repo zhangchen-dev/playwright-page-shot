@@ -137,6 +137,7 @@
       aiMode: coordinateInfo.aiMode || 1,
       showNextStep: coordinateInfo.showNextStep || false,
       welcomeSpeech: coordinateInfo.welcomeSpeech || '',
+      sceneStoryShow: data.sceneStoryShow || false,
       currentStep: [-1, -1, -1],
       stepState: '0',
       mapClose: false,
@@ -333,8 +334,13 @@
     var container = $('#stepTipContainer');
     if (!container) return;
 
-    if (AppState.sceneStoryShow && AppState.currentStep[0] >= 0 && AppState.currentStep[1] >= 0) {
-      var stepConf = AppState.modelList[AppState.currentStep[0]].stepList[AppState.currentStep[1]];
+    // ★ 当前步骤需存在且含故事文案才展示，避免空框
+    var stepConf = null;
+    if (AppState.currentStep[0] >= 0 && AppState.currentStep[1] >= 0 &&
+        AppState.modelList[AppState.currentStep[0]] && AppState.modelList[AppState.currentStep[0]].stepList[AppState.currentStep[1]]) {
+      stepConf = AppState.modelList[AppState.currentStep[0]].stepList[AppState.currentStep[1]];
+    }
+    if (AppState.sceneStoryShow && stepConf && (stepConf.stepQsTitle || stepConf.stepQsDesc)) {
       $('#tipsTextQs').innerText = stepConf.stepQsTitle || '';
       $('#tipsTextAs').innerText = stepConf.stepQsDesc || '';
       removeClass(container, 'stepTipHide');
@@ -349,7 +355,6 @@
   function updateButtons() {
     var startBtn = $('#startBtn');
     var btnContainer = $('#btnContainer');
-    var globalTool = $('#globalTool');
     var floatBtn = $('#floatBtn');
     var mapToggleBtn = $('#mapToggleBtn');
 
@@ -357,19 +362,16 @@
       // 未开始
       startBtn.style.display = 'block';
       btnContainer.style.display = 'none';
-      globalTool.style.display = 'none';
       floatBtn.style.display = 'none';
     } else if (AppState.stepState === '3') {
       // 已完成
       startBtn.style.display = 'none';
       btnContainer.style.display = 'none';
-      globalTool.style.display = 'none';
       showFinishDialog();
     } else {
       // 进行中
       startBtn.style.display = 'none';
       btnContainer.style.display = 'flex';
-      globalTool.style.display = 'flex';
       floatBtn.style.display = AppState.mapClose ? 'block' : 'none';
     }
 

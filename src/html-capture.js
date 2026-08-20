@@ -56,18 +56,45 @@ class HtmlCapture {
           });
         });
 
-        return '<!DOCTYPE html>\n' + clone.outerHTML;
+        // ★ 返回 {html, baseURI}：baseURI 取自 live document（含 <base href> 解析结果）。
+        //   clone 内虽已移除 <base>，但 document.baseURI 来自真实文档，不受影响。
+        return JSON.stringify({
+          html: '<!DOCTYPE html>\n' + clone.outerHTML,
+          baseURI: document.baseURI,
+        });
       })
       .catch((err) => {
         console.warn('[HtmlCapture] DOM 清理失败，使用原始 HTML:', err.message);
         return null;
       });
 
-    // 回退：如果 page.evaluate 失败，使用 page.content()
-    const rawHtml = cleanedHtml || (await this.page.content());
+    // 解析 DOM 清理结果（现在返回 {html, baseURI} JSON）
+    let rawHtml = cleanedHtml;
+    let capturedBase = '';
+    if (cleanedHtml) {
+      try {
+        const parsed = JSON.parse(cleanedHtml);
+        rawHtml = parsed.html || '';
+        capturedBase = typeof parsed.baseURI === 'string' ? parsed.baseURI : '';
+      } catch (e) {
+        // 兼容：历史实现可能直接返回纯字符串 HTML
+        rawHtml = cleanedHtml;
+      }
+    }
+    // 回退：如果 page.evaluate 失败 / 解析后无内容，使用 page.content()
+    if (!rawHtml) {
+      rawHtml = await this.page.content();
+    }
+
+    // ★ 文档基准地址：优先 document.baseURI（含 <base href>），回退页面 URL。
+    //   所有相对路径（资源/link/style）均以此为基准解析，
+    //   解决「页面在子目录、资源在基准目录」导致拼接错误的普遍问题。
+    const docBaseUrl = capturedBase || currentUrl;
 
     // 2. 使用 cheerio 解析 HTML
     const $ = cheerio.load(rawHtml, { decodeEntities: false });
+    // ★ 防御：确保产物不含 <base>（避免回放时文档 baseURI 干扰已固化为绝对的地址）
+    $('base').remove();
     let cssContent = '';
 
     // 3. 处理外部 CSS link - 在浏览器上下文中 fetch（保留 cookie/鉴权）
@@ -83,7 +110,7 @@ class HtmlCapture {
       let absUrl = href;
       if (!href.startsWith('data:') && !href.startsWith('http')) {
         try {
-          absUrl = new URL(href, currentUrl).href;
+          absUrl = new URL(href, docBaseUrl).href;
         } catch (e) {
           continue;
         }
@@ -114,7 +141,7 @@ class HtmlCapture {
     // 4. 提取内联 style 标签
     $('style').each((_, el) => {
       const styleContent = $(el).text() || '';
-      const fixedStyle = fixCssUrls(styleContent, currentUrl);
+      const fixedStyle = fixCssUrls(styleContent, docBaseUrl);
       cssContent += '/* ===== inline style ===== */\n' + fixedStyle + '\n\n';
       $(el).remove();
     });
@@ -122,7 +149,7 @@ class HtmlCapture {
     cssContent = deduplicateCSS(cssContent);
 
     // 5. 处理资源 URL（相对路径转绝对路径）
-    this._fixResourceUrls($, currentUrl);
+    this._fixResourceUrls($, docBaseUrl);
 
     // 6. 添加 CSS 引用
     const cssFilename = stepId + '.css';
@@ -144,7 +171,7 @@ class HtmlCapture {
     }
 
     // 7. 处理 iframe 内容
-    const iframeFiles = await this._captureIframes($, stepId, currentUrl);
+    const iframeFiles = await this._captureIframes($, stepId, docBaseUrl);
 
     // 8. 添加步骤跳转脚本
     const currentStepMarks = marks || [];
@@ -193,12 +220,16 @@ class HtmlCapture {
    * @param {boolean} options.isEndRecording - 是否是录制的最后一步
    * @returns {object} 快照对象
    */
-  async processFromCapturedData({ url, html, cssContents, iframes, stepId, nextStepId, marks, isEndRecording }) {
+  async processFromCapturedData({ url, html, cssContents, iframes, baseUrl, stepId, nextStepId, marks, isEndRecording }) {
     const currentUrl = url || '';
+    // ★ 文档基准地址：优先透传的 document.baseURI（含 <base href>），回退页面 url
+    const docBaseUrl = baseUrl || currentUrl;
     const rawHtml = html || '<!DOCTYPE html><html><body></body></html>';
 
     // 1. 使用 cheerio 解析 HTML
     const $ = cheerio.load(rawHtml, { decodeEntities: false });
+    // ★ 防御：确保产物不含 <base>
+    $('base').remove();
     let cssContent = '';
 
     // 2. 处理预获取的外部 CSS（替换 page.evaluate fetch 逻辑）
@@ -214,7 +245,7 @@ class HtmlCapture {
     // 3. 提取内联 style 标签
     $('style').each((_, el) => {
       const styleContent = $(el).text() || '';
-      const fixedStyle = fixCssUrls(styleContent, currentUrl);
+      const fixedStyle = fixCssUrls(styleContent, docBaseUrl);
       cssContent += '/* ===== inline style ===== */\n' + fixedStyle + '\n\n';
       $(el).remove();
     });
@@ -222,7 +253,7 @@ class HtmlCapture {
     cssContent = deduplicateCSS(cssContent);
 
     // 4. 处理资源 URL（相对路径转绝对路径）
-    this._fixResourceUrls($, currentUrl);
+    this._fixResourceUrls($, docBaseUrl);
 
     // 5. 添加 CSS 引用
     const cssFilename = stepId + '.css';
@@ -263,17 +294,19 @@ class HtmlCapture {
       // 处理绝对 URL（如果有 src）
       let absSrc = src;
       if (src && !src.startsWith('data:') && !src.startsWith('http')) {
-        try { absSrc = new URL(src, currentUrl).href; } catch (e) { absSrc = src; }
+        try { absSrc = new URL(src, docBaseUrl).href; } catch (e) { absSrc = src; }
       }
 
+      // ★ iframe 资源基准：优先 iframe 自身 document.baseURI（matched.baseURI，渲染进程捕获），
+      //   其次 iframe 解析后的 src，最后回退主文档基准
+      const iframeBase = matched.baseURI || absSrc || docBaseUrl;
       // 处理 iframe HTML（复用 _processIframeHtml：移除脚本、修复资源URL、提取内联样式）
-      const baseUrl = absSrc || currentUrl;
-      const processedIframe = this._processIframeHtml(matched.html, baseUrl);
+      const processedIframe = this._processIframeHtml(matched.html, iframeBase);
 
       // 合并 iframe 的外部 CSS（预捕获）+ 内联样式
       let iframeCss = processedIframe.cssContent || '';
       if (matched.inlineCss) {
-        iframeCss += '/* ===== inline style ===== */\n' + matched.inlineCss + '\n\n';
+        iframeCss += '/* ===== inline style ===== */\n' + fixCssUrls(matched.inlineCss, iframeBase) + '\n\n';
       }
       for (const cssItem of (matched.cssContents || [])) {
         if (cssItem && cssItem.content) {
@@ -338,7 +371,17 @@ class HtmlCapture {
    * 修复资源 URL（相对路径转绝对路径）
    */
   _fixResourceUrls($, baseUrl) {
+    // ★ 需要跳过的前缀：已是绝对 URL / 特殊协议 / 锚点，不应被相对解析。
+    //   覆盖 <a href> 等导航链接里可能出现的 javascript:/mailto:/tel:/# 等。
+    const SKIP_PREFIX = [
+      'data:', 'http:', 'https:', 'blob:',
+      'javascript:', 'mailto:', 'tel:', 'chrome:', 'chrome-extension:', 'about:',
+      '#',
+    ];
+    const shouldSkip = (v) => !v || SKIP_PREFIX.some((p) => v.startsWith(p));
+
     const urlSelectors = [
+      // 资源类
       { sel: 'img[src]', attr: 'src' },
       { sel: 'video[src]', attr: 'src' },
       { sel: 'audio[src]', attr: 'src' },
@@ -348,18 +391,23 @@ class HtmlCapture {
       { sel: 'embed[src]', attr: 'src' },
       { sel: 'object[data]', attr: 'data' },
       { sel: 'track[src]', attr: 'src' },
+      { sel: 'input[src]', attr: 'src' },
+      // 导航 / 引用类（超链接、热点、图标、表单等相对地址也需转绝对）
+      { sel: 'a[href]', attr: 'href' },
+      { sel: 'area[href]', attr: 'href' },
+      { sel: 'link[href]', attr: 'href' },
+      { sel: 'form[action]', attr: 'action' },
     ];
 
     for (const { sel, attr } of urlSelectors) {
       $(sel).each((_, el) => {
         const val = $(el).attr(attr);
-        if (val && !val.startsWith('data:') && !val.startsWith('http')) {
-          try {
-            const absUrl = new URL(val, baseUrl).href;
-            $(el).attr(attr, absUrl);
-          } catch (e) {
-            // ignore
-          }
+        if (shouldSkip(val)) return;
+        try {
+          const absUrl = new URL(val, baseUrl).href;
+          $(el).attr(attr, absUrl);
+        } catch (e) {
+          // ignore
         }
       });
     }
@@ -382,6 +430,35 @@ class HtmlCapture {
         })
         .join(', ');
       $(el).attr('srcset', newSrcset);
+    });
+
+    // ★ 处理内联 style 属性里的 url(...)（相对→绝对）。
+    //   之前 _fixResourceUrls 只扫标签属性（img[src] 等），不处理 style 属性，
+    //   导致 <div style="background:url(./img/x.png)"> 这类背景图在导出后仍是相对路径，
+    //   file:// 预览/部署后因找不到相对目录而丢失 —— 移动端页面尤其常见（内联背景图）。
+    $('[style]').each((_, el) => {
+      const style = $(el).attr('style');
+      if (!style || style.indexOf('url(') === -1) return;
+      const fixed = style.replace(/url\(\s*(['"]?)(.*?)\1\s*\)/gi, (match, quote, urlPath) => {
+        urlPath = (urlPath || '').trim();
+        if (
+          !urlPath ||
+          urlPath.startsWith('data:') ||
+          urlPath.startsWith('http://') ||
+          urlPath.startsWith('https://') ||
+          urlPath.startsWith('blob:') ||
+          urlPath.startsWith('#')
+        ) {
+          return match;
+        }
+        try {
+          const absUrl = new URL(urlPath, baseUrl).href;
+          return 'url(' + quote + absUrl + quote + ')';
+        } catch (e) {
+          return match;
+        }
+      });
+      if (fixed !== style) $(el).attr('style', fixed);
     });
   }
 
@@ -428,7 +505,13 @@ class HtmlCapture {
 
       try {
         const iframeHtml = await matchedFrame.content();
-        const processedIframe = this._processIframeHtml(iframeHtml, src);
+        // ★ iframe 内也可能声明 <base href>，其资源应以 iframe 自身 document.baseURI 为基准
+        let iframeBase = src;
+        try {
+          const bi = await matchedFrame.evaluate(() => document.baseURI);
+          if (typeof bi === 'string' && bi) iframeBase = bi;
+        } catch (e) { /* 忽略，回退到解析后的 iframe src */ }
+        const processedIframe = this._processIframeHtml(iframeHtml, iframeBase);
 
         iframeIndex++;
         const iframeFilename = stepId + '_iframe_' + iframeIndex + '.html';
@@ -439,7 +522,7 @@ class HtmlCapture {
           content: processedIframe.html,
           cssContent: processedIframe.cssContent,
           cssFilename: iframeCssFilename,
-          originalUrl: src,
+          originalUrl: iframeBase,
         });
 
         $(iframeEl).attr('src', './' + iframeFilename);

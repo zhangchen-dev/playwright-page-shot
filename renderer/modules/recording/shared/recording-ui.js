@@ -538,7 +538,8 @@ export function collectIntroduction() {
   const answer = answerInput ? answerInput.value.trim() : '';
 
   if (!question && !answer) return null;
-  return { question, answer };
+  // ★ isMobileGuide：当前是否处于移动端录制模式，随场景故事一并落库，供地图模板 selector.isMobileGuide 使用
+  return { question, answer, isMobileGuide: !!appState.isMobileMode };
 }
 
 export function renderMarkList(container) {

@@ -75,6 +75,14 @@
             <option value="1920">🖥️ 1920×1080</option>
             <option value="1366">💻 1366×768</option>
           </select>
+          <!-- ★ 移动端录制/预览开关：开启后 webview 以移动端视口 + 移动 UA + 触摸模拟展示 -->
+          <label class="mobile-mode-control" id="mobileModeControl" title="移动端预览/录制（固定移动端视口 + 移动 UA）">
+            <span class="mobile-mode-label">📱 移动端</span>
+            <label class="switch-toggle">
+              <input type="checkbox" id="mobileModeSwitch">
+              <span class="switch-slider"></span>
+            </label>
+          </label>
           <button class="fit-page-btn" id="fitPageBtn" title="适配页面（按比例缩放到容器）">📐 适配</button>
           <select class="zoom-select" id="zoomSelect" title="缩放比例">
             <option value="1.0">100%</option>

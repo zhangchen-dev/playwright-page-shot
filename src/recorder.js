@@ -25,6 +25,8 @@ class Recorder {
     this.resourceBaseUrl = '';
     this.lastExportDir = ''; // ★ 记录上次导出目录（用于预览）
     this.pageMarks = new Map();
+    // ★ 移动端录制标记：开启移动端模式录制的场景，导出时 selector.isMobileGuide = true
+    this.isMobileMode = false;
     // ★ 场景码 + 环境配置
     this.sceneCode = '';        // 场景码（场景名称+随机码）
     this.environment = 'local'; // 环境选择: 'local' | 'dev' | 'prd'
@@ -275,7 +277,7 @@ class Recorder {
    * 使用渲染进程预捕获的 HTML/CSS 数据，不需要 Playwright page 对象
    */
   async _nextStepWebview(msg) {
-    const { url, html, cssContents, iframes, isEndRecording: forceEnd } = msg;
+    const { url, html, cssContents, iframes, baseURI, isEndRecording: forceEnd } = msg;
     const activePageId = 'webview';
     this._saveCurrentModuleMeta(msg);
     const marks = this.pageMarks.get(activePageId) || [];
@@ -289,6 +291,7 @@ class Recorder {
         html,
         cssContents,
         iframes,
+        baseUrl: baseURI,
         stepId: this.currentStepId,
         nextStepId: this.nextStepId,
         marks,
@@ -404,8 +407,10 @@ class Recorder {
 
   async _endAndSave(msg) {
     const { pageId, modName, mainModName, mainModDesc, resourceBaseUrl, introduction,
-            environment, sceneCode, envBaseUrl, reRecordSaveMode } = msg;
+            environment, sceneCode, envBaseUrl, reRecordSaveMode, isMobile } = msg;
     const activePageId = pageId || this._getActivePageId();
+    // ★ 记录移动端录制标记（供导出 selector.isMobileGuide 使用）
+    this.isMobileMode = !!isMobile;
 
     // ★ 如果是重录模式且没有新录制的步骤，先尝试将残留的标记清掉（不报错）
     if (this.reRecord.active && this.getNewStepCount() === 0) {
@@ -481,6 +486,7 @@ class Recorder {
       this.sceneCode = ''; // ★ 重置场景码
       this.environment = 'local'; // ★ 重置环境
       this.envBaseUrl = ''; // ★ 重置远端地址
+      this.isMobileMode = false; // ★ 重置移动端标记
       this.pageMarks.clear();
       this._resetReRecord();
 

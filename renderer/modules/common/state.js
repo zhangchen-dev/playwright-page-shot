@@ -65,6 +65,9 @@ export const appState = {
   currentPreviewDirName: null,  // ★ 当前正在预览的场景目录名（用于高亮）
   currentPreviewStepIndex: 0,   // ★ 当前预览步骤索引
   currentResolution: '1920',    // 默认桌面 1920×1080
+  isMobileMode: false,          // ★ 移动端录制/预览模式（固定移动端视口 + 移动 UA + 触摸模拟）
+  forcePCMode: false,           // ★ 预览视图强制 PC：场景管理/定制演示等预览场景一律以 PC 展示，
+                                //   覆盖 isMobileMode；切回录制视图后自动失效，不破坏录制移动端状态。
 
   // ★ 继续录制模式标志（管理视图点击"继续录制"后设置，用于跳过视图切换确认对话框）
   _continueRecordingMode: false,
@@ -83,5 +86,7 @@ export const CONSTANTS = {
   WEBVIEW_RESOLUTIONS: {
     '1920': { width: 1920, height: 1080, label: '桌面' },
     '1366': { width: 1366, height: 768,  label: '笔记本' },
+    // ★ 移动端固定视口（iPhone 12/13/14 逻辑分辨率，约 19.5:9 宽高比）
+    'mobile': { width: 390, height: 844, label: '移动端', isMobile: true },
   },
 };

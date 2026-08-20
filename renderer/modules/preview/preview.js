@@ -3,11 +3,11 @@
  */
 import { appState } from '../common/state.js';
 import { updateStatus, showToast } from '../common/feedback.js';
-import { updateLayout, showRecordingBanner } from '../common/layout.js';
+import { updateLayout, showRecordingBanner, updateMobileControlVisibility } from '../common/layout.js';
 import { hideBanner } from '../common/banner.js';
-import { applyFitPage, updateWebviewScale } from '../common/webview-controls.js';
+import { applyFitPage, updateWebviewScale, effectiveMobileMode } from '../common/webview-controls.js';
 import { disableWebviewSelectionMode } from '../recording/internal/webview-recording.js';
-import { closeExtraTabs } from '../common/tabs.js';
+import { closeExtraTabs, applyMobileToAllTabs } from '../common/tabs.js';
 import { renderPreviewStepSelector } from './step-selector.js';
 
 /** 将本地文件路径转为 file:// URL */
@@ -56,6 +56,8 @@ export async function openPreview(filePath, htmlFiles, dirName) {
   // ★ 显示工具栏操作（适配/缩放）— 预览模式也支持
   const toolbarActions = document.getElementById('rightToolbarActions');
   if (toolbarActions) toolbarActions.style.display = '';
+  // ★ 场景管理等非录制视图预览时，隐藏移动端开关（仅在录制视图显示）
+  updateMobileControlVisibility();
 
   // ★ 隐藏 Banner（向上滚动移除动画），露出下方 webview 预览页面
   hideBanner();
@@ -69,6 +71,16 @@ export async function openPreview(filePath, htmlFiles, dirName) {
   } catch (e) {
     console.warn('[preview] closeExtraTabs 失败（不阻断预览）:', e.message);
   }
+
+  // ★ 预览视图强制 PC：不论录制视图是否开了📱移动端，预览一律以 PC 展示。
+  //   打开 forcePCMode 后，所有加载事件 / openTab / 重载 / 导航都走 PC UA + 桌面视口；
+  //   切回录制视图时（layout.js switchView）会自动清零 forcePCMode，isMobileMode 原样保留。
+  appState.forcePCMode = true;
+  appState.currentResolution = '1920';
+  const _pcContainer = document.getElementById('previewContainer');
+  if (_pcContainer) _pcContainer.classList.remove('mobile-frame-active');
+  applyMobileToAllTabs(false); // 对所有（剩余的）tab 写回 PC UA + PC useragent 属性 + 关闭触摸模拟
+  updateWebviewScale();
 
   updateLayout();
 

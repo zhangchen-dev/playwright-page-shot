@@ -8,6 +8,8 @@ import { renderSettingsView } from '../settings/settings-view.js';
 import { renderDemoView } from '../demo/demo-view.js';
 import { showBanner, hideBanner } from './banner.js';
 import { showConfirmDialog } from './feedback.js';
+import { updateWebviewScale } from './webview-controls.js';
+import { applyMobileToAllTabs, reloadAllTabs } from './tabs.js';
 
 // ★ 根据录制模式 + 浏览器状态 + 浏览器模式，条件控制窗口置顶
 export function updateAlwaysOnTop() {
@@ -100,6 +102,31 @@ export function switchView() {
   // ★ 更新右栏内容（保持打开，避免切换菜单时窗口缩放）
   updateRightPanelState({ preserveClosed: true });
   updateAlwaysOnTop(); // ★ 切换视图时更新窗口置顶状态
+
+  // ★ 预览视图强制 PC：场景管理/定制演示/设置 等预览场景一律以 PC 展示，
+  //   覆盖录制视图的移动端开关；切回录制视图后恢复录制移动端状态（isMobileMode 原样保留）。
+  const willForcePC = (appState.currentView !== 'recording');
+  if (appState.forcePCMode !== willForcePC) {
+    appState.forcePCMode = willForcePC;
+    const _pcContainer2 = document.getElementById('previewContainer');
+    if (willForcePC) {
+      // 切到非录制视图：强制 PC
+      appState.currentResolution = '1920';
+      applyMobileToAllTabs(false);
+      if (_pcContainer2) _pcContainer2.classList.remove('mobile-frame-active');
+    } else if (appState.isMobileMode) {
+      // 切回录制视图且移动端开着：恢复移动端模拟
+      appState.currentResolution = 'mobile';
+      applyMobileToAllTabs(true);
+      if (_pcContainer2) _pcContainer2.classList.add('mobile-frame-active');
+    } else {
+      // 切回录制视图且 PC：确保 PC UA（处理预览残留的双保险）
+      applyMobileToAllTabs(false);
+    }
+    updateWebviewScale();
+    // 重载所有 tab，让新的 UA / 视口在首屏生效
+    try { reloadAllTabs(); } catch (e) {}
+  }
 }
 
 /** ★ 设置右栏标题 */
@@ -122,9 +149,18 @@ function restoreWebview() {
  * 优先级：录制中浏览器 > 当前预览 > 空闲Banner
  * @param {object} opts.preserveClosed - 切换菜单时保持右栏关闭状态（不强制展开）
  */
+/** ★ 移动端开关仅在「录制视图（应用内浏览器）」显示；场景管理/定制演示等预览场景不需要该开关 */
+export function updateMobileControlVisibility() {
+  const mobileControl = document.getElementById('mobileModeControl');
+  if (!mobileControl) return;
+  mobileControl.style.display = (appState.currentView === 'recording') ? '' : 'none';
+}
+
 export function updateRightPanelState(opts) {
   opts = opts || {};
   const toolbarActions = document.getElementById('rightToolbarActions');
+  // ★ 移动端开关仅在录制视图显示（场景管理预览等不需要）
+  updateMobileControlVisibility();
 
   // 切换菜单时若用户已收起右栏，保持收起（避免缩放）；其他场景强制展开
   if (!appState.rightColumnOpen && opts.preserveClosed) {

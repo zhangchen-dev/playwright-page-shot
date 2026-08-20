@@ -138,6 +138,8 @@ export async function handleEndAndSave() {
     isWebviewMode: appState.browserMode === 'in-app',
     // ★ 重录模式：传递保存模式（'replace' / 'insert' / 'replace-single'）
     reRecordSaveMode: inReRecord ? (appState._reRecordSaveMode || 'replace') : undefined,
+    // ★ 移动端录制标记：透传给 recorder，供导出 selector.isMobileGuide 使用
+    isMobile: appState.isMobileMode,
   });
   // 清理临时状态
   appState._reRecordSaveMode = null;

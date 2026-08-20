@@ -16,6 +16,7 @@
  */
 import { appState } from './state.js';
 import { api } from './api.js';
+import { applyMobileEmulation, MOBILE_UA, effectiveMobileMode } from './webview-controls.js';
 
 let logMain = (msg) => {
   try { if (window.electronAPI && window.electronAPI.logMain) window.electronAPI.logMain(msg); } catch (e) {}
@@ -127,6 +128,12 @@ export async function openTab(url) {
   wv.setAttribute('partition', 'persist:webview'); // 与主 tab 共享 session（登录态延续）
   // ★ 独立布尔属性，不能写进 webpreferences —— 否则新 tab 内再点 _blank 又会"没反应"
   wv.setAttribute('allowpopups', '');
+  // ★ 移动端模式：在首次 src 之前设置 useragent 属性，确保新 tab 的第一次导航即携带移动端 UA
+  //    （若等 did-start-loading 再设，首次请求已按桌面 UA 发出，会跳回 PC）
+  //    使用 effectiveMobileMode：预览视图强制 PC 时新 tab 也走 PC UA。
+  if (effectiveMobileMode()) {
+    try { wv.setAttribute('useragent', MOBILE_UA); } catch (e) {}
+  }
 
   // ★ preload 必须在 appendChild（attach）之前设置，
   //    attach 之后再改 preload/partition/src 会触发 ERR_ABORTED (-3) 并销毁 webContents
@@ -171,6 +178,8 @@ async function bindTabWebview(wv, tabId) {
         rec.injectWebviewElementHelper(wv).catch(() => {});
       }
       updateActiveTabScale();
+      // ★ 加载完成后【断言当前生效模式对应的 UA】（预览 PC / 录制移动）。
+      applyMobileEmulation(wv, effectiveMobileMode());
     });
 
     wv.addEventListener('did-start-loading', () => {
@@ -179,6 +188,14 @@ async function bindTabWebview(wv, tabId) {
         loading.textContent = '加载中...';
         loading.classList.add('active');
       }
+      // ★ 导航前【断言当前生效模式对应的 UA】（预览 PC / 录制移动）。
+      applyMobileEmulation(wv, effectiveMobileMode());
+    });
+
+    // ★ 新 tab 内再次跳转（did-navigate）也按当前生效模式【断言对应 UA】（预览 PC / 录制移动）。
+    wv.addEventListener('did-navigate', () => {
+      updateActiveTabScale();
+      applyMobileEmulation(wv, effectiveMobileMode());
     });
     wv.addEventListener('did-stop-loading', () => {
       const loading = document.getElementById('previewLoading');
@@ -336,4 +353,47 @@ export function getActiveTabPage() {
 /** 暴露当前激活 tab id */
 export function getActiveTabId() {
   return activeTabId;
+}
+
+/** ★ 对所有已存在的 tab webview 统一应用/撤销移动端模拟（切换移动端开关时刷新全部 tab，保持一致） */
+export function applyMobileToAllTabs(enabled) {
+  for (const [, t] of tabs) {
+    if (t && t.webviewEl) {
+      try { applyMobileEmulation(t.webviewEl, enabled); } catch (e) {}
+    }
+  }
+}
+
+/** ★ 重新加载 webview（reload 当前 URL；无 reload 方法时回退 getWebContents().reload） */
+function doReload(wv) {
+  if (!wv) return;
+  // ★ 重载前必须重新断言 UA：reload 的请求在导航前就已发出，若不在 reload 前
+  //    setUserAgent，站点会按桌面 UA 处理 → 出现"刷新后回到 PC"的现象。
+  //    isMobileMode 为真设移动 UA；为假且曾捕获过原始 UA 则还原桌面 UA（清掉残留）。
+  try {
+    // ★ 每次 reload 前【断言当前生效模式对应的 UA】（预览 PC / 录制移动），
+    //   不受 _originalUA 是否已捕获影响。
+    applyMobileEmulation(wv, effectiveMobileMode());
+  } catch (e) {}
+  try {
+    if (typeof wv.reload === 'function') {
+      wv.reload();
+    } else if (wv.getWebContents && wv.getWebContents()) {
+      wv.getWebContents().reload();
+    }
+  } catch (e) {
+    logMain('[tabs] reload 失败: ' + e.message);
+  }
+}
+
+/** ★ 仅重新加载当前激活 tab 的 webview（切换分辨率/视口后让当前页面按新视口重渲染） */
+export function reloadActiveWebview() {
+  doReload(getActiveWebview());
+}
+
+/** ★ 重新加载所有 tab 的 webview（切换移动端模式后让每个 tab 都按新 UA 重渲染，含 m. 域名跳转） */
+export function reloadAllTabs() {
+  for (const [, t] of tabs) {
+    if (t && t.webviewEl) doReload(t.webviewEl);
+  }
 }

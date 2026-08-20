@@ -201,6 +201,25 @@
   -webkit-app-region: no-drag;
 }
 
+/* ★ 移动端录制/预览开关 */
+.mobile-mode-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  white-space: nowrap;
+}
+.mobile-mode-control.active {
+  color: var(--accent-blue);
+}
+.mobile-mode-label {
+  user-select: none;
+}
+
 /* ★ 收起/展开控件按钮（始终可见，用于切换预览控件显隐） */
 .collapse-controls-btn {
   padding: 4px 10px;
@@ -661,6 +680,29 @@ body.fullscreen-preview #rightContent {
   flex-shrink: 0;
   transform-origin: top left;
   /* width/height/transform 由 JS 动态控制 */
+}
+
+/* ★ 移动端设备框：锁定为手机预览 —— 页面在右栏居中，外层加边框让边界可见 */
+.preview-container.mobile-frame-active {
+  background: #e9edf2;
+}
+.preview-container.mobile-frame-active .webview-scroll-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;          /* 水平居中（手机列） */
+  justify-content: flex-start;  /* 顶部对齐，内容高时向下滚动 */
+  overflow: auto;
+  padding: 24px 0;              /* 上下留白，让边框与边界更清晰 */
+  background: #e9edf2;
+}
+/* ★ 手机框：圆角边框 + 阴影，模拟设备外框；outline 不挤压布局、不被 overflow 裁剪 */
+.preview-container.mobile-frame-active .webview-scale-wrapper {
+  border-radius: 18px;
+  overflow: hidden;
+  background: #fff;
+  outline: 2px solid #2b2f36;
+  outline-offset: 0;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.22);
 }
 
 /* 预览步骤选择器 */

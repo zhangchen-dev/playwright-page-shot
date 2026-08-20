@@ -13,6 +13,7 @@ import { showSavePasswordDialog } from '../shared/credentials-ui.js';
 import { hideBanner } from '../../common/banner.js';
 import { rerenderPanel } from '../../app.js';
 import { getActiveWebview, closeExtraTabs } from '../../common/tabs.js';
+import { applyMobileEmulation, effectiveMobileMode } from '../../common/webview-controls.js';
 
 /**
  * ★ 取当前正在录制/浏览的 webview
@@ -81,6 +82,13 @@ export async function navigateInAppBrowser(url) {
   const oldSelector = document.querySelector('.preview-step-selector');
   if (oldSelector) oldSelector.remove();
   updateScenarioCardHighlight();
+
+  // ★ 导航前【断言当前生效模式对应的 UA】（预览 PC / 录制移动）。
+  //    地址栏导航的 request 必须在发出前携带正确 UA，
+  //    否则站点按桌面 UA 处理（PC 地址不跳移动端 / 移动地址刷新后跳回 PC）。
+  try {
+    applyMobileEmulation(webview, effectiveMobileMode());
+  } catch (e) {}
 
   webview.src = url;
 
@@ -330,7 +338,8 @@ export async function captureWebviewData() {
     '      if(attr.name.startsWith("on")) el.removeAttribute(attr.name);',
     '    });',
     '  });',
-    '  return "<!DOCTYPE html>\\n" + clone.outerHTML;',
+    '  var result = { html: "<!DOCTYPE html>\\n" + clone.outerHTML, baseURI: document.baseURI };',
+    '  return JSON.stringify(result);',
     '})()',
   ].join('\n');
 
@@ -405,7 +414,7 @@ export async function captureWebviewData() {
     '      var styles = Array.from(doc.querySelectorAll("style"));',
     '      var inlineCss = "";',
     '      styles.forEach(function(s){ inlineCss += s.textContent + "\\n"; });',
-    '      results.push({index: i, src: src, html: html, cssContents: cssContents, inlineCss: inlineCss});',
+    '      results.push({index: i, src: src, html: html, cssContents: cssContents, inlineCss: inlineCss, baseURI: doc.baseURI});',
     '    }catch(e){',
     '      console.warn("[rec iframe] capture failed:", src, e.message);',
     '    }',
@@ -423,7 +432,18 @@ export async function captureWebviewData() {
       console.warn('[panel] canvas 替换失败（不阻断主流程）:', e.message);
     }
 
-    const html = await withTimeout(webview.executeJavaScript(cleanupCode), 3000, 'HTML 捕获');
+    // ★ cleanupCode 现返回 {html, baseURI} JSON，解析出真实基准地址（含 <base href>）
+    const cleanupResult = await withTimeout(webview.executeJavaScript(cleanupCode), 3000, 'HTML 捕获');
+    let html = '';
+    let baseURI = '';
+    try {
+      const parsed = JSON.parse(cleanupResult);
+      html = parsed.html || '';
+      baseURI = typeof parsed.baseURI === 'string' ? parsed.baseURI : '';
+    } catch (e) {
+      // 兼容：若返回纯字符串 HTML
+      html = cleanupResult || '';
+    }
     const cssJson = await withTimeout(webview.executeJavaScript(cssFetchCode), 3000, 'CSS 捕获');
     let cssContents = [];
     try { cssContents = JSON.parse(cssJson); } catch (e) {}
@@ -438,7 +458,7 @@ export async function captureWebviewData() {
       console.warn('[panel] iframe 捕获失败（不阻断主流程）:', e.message);
     }
 
-    return { url, html, cssContents, iframes };
+    return { url, html, cssContents, iframes, baseURI };
   } catch (err) {
     console.warn('[panel] 捕获 webview 数据失败:', err.message);
     return null;

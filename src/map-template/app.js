@@ -102,6 +102,7 @@
             selector: {
               placeSelector: '[data-marked]',
               clickSelector: '[data-marked]',
+              isMobileGuide: introduction.isMobileGuide || false,
             },
             allowClick: true,
           });

@@ -1,10 +1,15 @@
 /**
  * IPC - 录制动作 + 元素选择 + 页面操作
  * 从原 ipc-handler.js 拆分
+ *
+ * ★ 2026-08-20：移除外部浏览器（Playwright）相关 handler
+ *   （enable/disable-selection-mode、navigate-to、get-active-page-url、
+ *    get-all-pages、set-active-page、close-browser）。
+ *   应用仅保留"应用内 webview"录制模式，元素选择由 webview 注入脚本完成。
  */
 const { ipcMain } = require('electron');
 
-function registerRecorderIpc({ recorder, browserManager }) {
+function registerRecorderIpc({ recorder }) {
   // ===== 录制操作（统一入口） =====
   ipcMain.handle('recorder-action', async (event, { type, ...msg }) => {
     try {
@@ -13,75 +18,6 @@ function registerRecorderIpc({ recorder, browserManager }) {
     } catch (err) {
       console.error('[IPC] recorder-action 失败:', err);
       return { type: 'error', message: err.message };
-    }
-  });
-
-  // ===== 元素选择 =====
-  ipcMain.handle('enable-selection-mode', async (event) => {
-    try {
-      await browserManager.enableSelectionMode();
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  });
-
-  ipcMain.handle('disable-selection-mode', async (event) => {
-    try {
-      await browserManager.disableSelectionMode();
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  });
-
-  // ===== 页面操作 =====
-  ipcMain.handle('get-active-page-url', async (event) => {
-    const active = browserManager.getActivePage();
-    return active ? active.url : null;
-  });
-
-  ipcMain.handle('navigate-to', async (event, url) => {
-    try {
-      if (!browserManager.isLaunched()) {
-        await browserManager.launch(url);
-        return { success: true, justLaunched: true };
-      }
-
-      const active = browserManager.getActivePage();
-      if (active && active.page) {
-        await active.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        return { success: true };
-      }
-      return { success: false, error: '没有活跃页面' };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  });
-
-  // ★ 获取所有标签页（含焦点标识）
-  ipcMain.handle('get-all-pages', async (event) => {
-    const activePageId = browserManager._activePageId;
-    return browserManager.getAllPages().map((p) => ({
-      pageId: p.pageId,
-      url: p.url,
-      isActive: p.pageId === activePageId,
-    }));
-  });
-
-  // ★ 手动切换焦点页面
-  ipcMain.handle('set-active-page', async (event, pageId) => {
-    browserManager.setActivePageId(pageId);
-    return { success: true };
-  });
-
-  // ★ 关闭浏览器
-  ipcMain.handle('close-browser', async (event) => {
-    try {
-      await browserManager.close();
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err.message };
     }
   });
 }

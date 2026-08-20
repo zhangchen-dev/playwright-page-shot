@@ -11,12 +11,11 @@ import { showConfirmDialog } from './feedback.js';
 import { updateWebviewScale } from './webview-controls.js';
 import { applyMobileToAllTabs, reloadAllTabs } from './tabs.js';
 
-// ★ 根据录制模式 + 浏览器状态 + 浏览器模式，条件控制窗口置顶
+// ★ 窗口置顶：应用内 webview 模式不再需要（外部弹窗浏览器已移除），保持不置顶。
 export function updateAlwaysOnTop() {
-  const shouldOnTop = (appState.currentView === 'recording') && appState.browserLaunched && (appState.browserMode === 'external');
-  if (shouldOnTop !== appState.isAlwaysOnTop) {
-    appState.isAlwaysOnTop = shouldOnTop;
-    api.setAlwaysOnTop(shouldOnTop);
+  if (appState.isAlwaysOnTop) {
+    appState.isAlwaysOnTop = false;
+    api.setAlwaysOnTop(false);
   }
 }
 
@@ -172,21 +171,14 @@ export function updateRightPanelState(opts) {
   // 确保右栏打开
   appState.rightColumnOpen = true;
 
-  // 1. 录制视图 + 浏览器已打开 → webview（应用内）/ 步骤树（外层）
+  // 1. 录制视图 + 浏览器已打开 → webview（应用内浏览器模式）
   if (appState.currentView === 'recording' && appState.browserLaunched) {
     hideBanner();
-    if (appState.browserMode === 'in-app') {
-      appState.rightPanelMode = 'preview';
-      if (toolbarActions) toolbarActions.style.display = '';
-      restoreWebview();
-      updateLayout();
-      setRightTitle('应用内浏览器');
-    } else {
-      appState.rightPanelMode = 'steps';
-      if (toolbarActions) toolbarActions.style.display = 'none';
-      updateLayout();
-      rerenderPanel();
-    }
+    appState.rightPanelMode = 'preview';
+    if (toolbarActions) toolbarActions.style.display = '';
+    restoreWebview();
+    updateLayout();
+    setRightTitle('应用内浏览器');
     return;
   }
 

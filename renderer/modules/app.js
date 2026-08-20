@@ -65,7 +65,8 @@ api.onElementSelected((data) => {
   appState.hasSelectedElement = true;
   appState.selectedElementData = data;
   appState.isSelectingMode = false;
-  api.disableSelectionMode();
+  // ★ 应用内模式：元素选择由 webview 注入脚本自行关闭（disableWebviewSelectionMode）
+  //    onSelectionCancelled 事件已在 webview 侧触发，无需再调用外部 disableSelectionMode
   // ★ 自动填充主标题（如果为空）
   const mtInput = document.getElementById('markMainTitleInput');
   if (mtInput && !mtInput.value && data.text) mtInput.value = data.text;
@@ -77,7 +78,7 @@ api.onSelectionCancelled(() => {
   appState.hasSelectedElement = false;
   appState.selectedElementData = null;
   appState.isSelectingMode = false;
-  api.disableSelectionMode();
+  // ★ 应用内模式：选择取消由 webview 注入脚本处理，无需调用外部 disableSelectionMode
   updateMarkUI();
   updateStatus('', '');
 });

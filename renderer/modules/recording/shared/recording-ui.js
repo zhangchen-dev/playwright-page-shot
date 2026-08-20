@@ -152,28 +152,12 @@ export function renderRecordingPhase() {
     ? currentMainMod.subModules[appState.state.currentSubModuleIndex]
     : null;
 
-  // ── 标签页列表 ──
+  // ── 当前页面信息（应用内单页模式，无外部多标签页） ──
   const tabSection = el('div', 'tab-section');
   tabSection.id = 'tabSection';
-  api.getAllPages().then((pages) => {
-    const tabSectionEl = document.getElementById('tabSection');
-    if (!tabSectionEl) return;
-    tabSectionEl.innerHTML = '';
-    if (pages.length <= 1) {
-      const info = el('div', 'page-info');
-      info.innerHTML = '当前页面: <span class="page-info-url">' + (appState.state.activePageUrl || '空白页') + '</span>';
-      tabSectionEl.appendChild(info);
-    } else {
-      tabSectionEl.appendChild(el('div', 'section-title', '标签页'));
-      pages.forEach((p) => {
-        const tabItem = el('div', p.isActive ? 'tab-item active' : 'tab-item');
-        tabItem.appendChild(el('span', 'tab-url', shortenUrl(p.url)));
-        if (p.isActive) tabItem.appendChild(el('span', 'tab-badge', '当前'));
-        tabItem.addEventListener('click', () => api.setActivePage(p.pageId));
-        tabSectionEl.appendChild(tabItem);
-      });
-    }
-  });
+  const info = el('div', 'page-info');
+  info.innerHTML = '当前页面: <span class="page-info-url">' + (appState.state.activePageUrl || '空白页') + '</span>';
+  tabSection.appendChild(info);
   contentEl.appendChild(tabSection);
 
   // ★ 快捷登录区域 — 检测到登录表单且有已保存凭证时显示
@@ -228,7 +212,7 @@ export function renderRecordingPhase() {
     }
     await sendAction('addMainModule', {
       mainModName, mainModDesc, modName, introduction: intro,
-      pageId: appState.browserMode === 'in-app' ? 'webview' : undefined,
+      pageId: 'webview',
       ...(webviewData || {}),
     });
   });
@@ -334,7 +318,7 @@ export function renderRecordingPhase() {
     }
     await sendAction('addSubModule', {
       modName, mainModName, mainModDesc, introduction: intro,
-      pageId: appState.browserMode === 'in-app' ? 'webview' : undefined,
+      pageId: 'webview',
       ...(webviewData || {}),
     });
   });
@@ -506,8 +490,6 @@ export function renderRecordingPhase() {
       } catch (err) {
         showToast('捕获页面失败: ' + err.message, 'error');
       }
-    } else {
-      await sendAction('nextStep', { mainModName, mainModDesc, modName });
     }
   });
   btnRow.appendChild(nextStepBtn);
@@ -555,12 +537,12 @@ export function renderMarkList(container) {
     const deleteBtn = el('button', 'mark-delete-btn', '\u00d7');
     deleteBtn.addEventListener('click', () => {
       // ★ webview 模式下先移除 webview 中的元素 ID
-      if (appState.browserMode === 'in-app' && markData.elementId) {
+      if (markData.elementId) {
         removeWebviewElementId(markData.elementId);
       }
       sendAction('deleteMark', {
         markIndex: idx,
-        pageId: appState.browserMode === 'in-app' ? 'webview' : undefined,
+        pageId: 'webview',
       });
     });
     item.appendChild(deleteBtn);

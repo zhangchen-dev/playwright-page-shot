@@ -7,15 +7,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ===== 录制操作 =====
   sendAction: (type, msg) => ipcRenderer.invoke('recorder-action', { type, ...msg }),
 
-  // ===== 元素选择 =====
-  enableSelectionMode: () => ipcRenderer.invoke('enable-selection-mode'),
-  disableSelectionMode: () => ipcRenderer.invoke('disable-selection-mode'),
-
-  // ===== 页面操作 =====
-  getActivePageUrl: () => ipcRenderer.invoke('get-active-page-url'),
-  navigateTo: (url) => ipcRenderer.invoke('navigate-to', url),
-  getAllPages: () => ipcRenderer.invoke('get-all-pages'),
-  setActivePage: (pageId) => ipcRenderer.invoke('set-active-page', pageId),
+  // ★ 元素选择由应用内 webview 注入脚本完成（enableWebviewSelectionMode /
+  //   disableWebviewSelectionMode），不再提供外部浏览器选择模式 IPC。
 
   // ===== 保存目录 =====
   selectSaveDirectory: () => ipcRenderer.invoke('select-save-directory'),
@@ -25,9 +18,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimizeToTray: () => ipcRenderer.invoke('minimize-to-tray'),
   setAlwaysOnTop: (flag) => ipcRenderer.invoke('set-always-on-top', flag),
   resizeWindow: (width) => ipcRenderer.invoke('resize-window', width),
-
-  // ===== 浏览器状态 =====
-  isBrowserLaunched: () => ipcRenderer.invoke('is-browser-launched'),
 
   // ★ 获取注入脚本内容（用于应用内 webview 元素选择）
   getInjectScript: (scriptName) => ipcRenderer.invoke('get-inject-script', scriptName),
@@ -61,9 +51,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cancelRerecord: () => ipcRenderer.invoke('cancel-rerecord'),
   reloadRecording: (dirPath) => ipcRenderer.invoke('reload-recording', dirPath),
 
-  // ★ 关闭浏览器
-  closeBrowser: () => ipcRenderer.invoke('close-browser'),
-
   // ★ 打开外部 URL（系统默认应用，处理 mailto:/tel:/ftp: 等非 http 协议）
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
 
@@ -78,10 +65,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ★ 凭证管理（密码快捷登录）
   getCredentials: (domain) => ipcRenderer.invoke('get-credentials', domain),
   getCredential: (data) => ipcRenderer.invoke('get-credential', data),
-  fillCredentials: (data) => ipcRenderer.invoke('fill-credentials', data),
   saveCredential: (data) => ipcRenderer.invoke('save-credential', data),
   deleteCredential: (data) => ipcRenderer.invoke('delete-credential', data),
   getAllCredentials: () => ipcRenderer.invoke('get-all-credentials'),
+  // ★ 凭证填充走应用内 webview 注入（fillWebviewCredentials），不再经主进程 BrowserManager。
 
   // ===== 事件监听 =====
   onStateSync: (callback) => {

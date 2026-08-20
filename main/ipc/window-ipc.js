@@ -18,9 +18,9 @@ function registerWindowIpc({ recorder, browserManager, panelWindowGetter }) {
     return { success: true };
   });
 
-  // ===== 检查浏览器是否已启动 =====
+  // ===== 检查浏览器是否已启动（仅外部浏览器；应用内 webview 不在此列） =====
   ipcMain.handle('is-browser-launched', async (event) => {
-    return browserManager.isLaunched();
+    return !!browserManager && browserManager.isLaunched();
   });
 
   // ===== ★ 窗口尺寸控制（用于应用内预览模式） =====

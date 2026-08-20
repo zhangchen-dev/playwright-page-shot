@@ -207,45 +207,7 @@ export function initBrowserModeControls() {
     });
   }
 
-  // ★ 浏览器模式切换 — Switch 开关
-  const switchInput = document.getElementById('browserModeSwitch');
-  if (switchInput) {
-    // 同步初始状态（默认 checked = 应用内）
-    switchInput.checked = (appState.browserMode === 'in-app');
-
-    switchInput.addEventListener('change', () => {
-      const mode = switchInput.checked ? 'in-app' : 'external';
-      if (mode === appState.browserMode) return;
-
-      appState.browserMode = mode;
-
-      // 更新 switch-option 高亮
-      document.querySelectorAll('.switch-option').forEach((opt) => {
-        opt.classList.toggle('active', opt.dataset.mode === mode);
-      });
-
-      // 切换到外层模式时隐藏工具栏操作
-      if (mode === 'external') {
-        const toolbarActions = document.getElementById('rightToolbarActions');
-        if (toolbarActions) toolbarActions.style.display = 'none';
-      }
-
-      updateAlwaysOnTop();
-      showToast(mode === 'external' ? '已切换到外层浏览器模式' : '已切换到应用内浏览器模式', 'info');
-    });
-  }
-
-  // switch-option 点击也可切换
-  document.querySelectorAll('.switch-option').forEach((opt) => {
-    opt.addEventListener('click', () => {
-      const mode = opt.dataset.mode;
-      if (mode === appState.browserMode) return;
-      if (switchInput) {
-        switchInput.checked = (mode === 'in-app');
-        switchInput.dispatchEvent(new Event('change'));
-      }
-    });
-  });
+  // ★ 浏览器模式切换已移除：应用固定为"应用内 webview"模式（外部 Playwright 浏览器已删除）。
 
   // 适配页面按钮
   const fitBtn = document.getElementById('fitPageBtn');

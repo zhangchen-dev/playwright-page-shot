@@ -4,7 +4,6 @@
 const { app, BrowserWindow, screen, Tray, Menu, nativeImage, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { BrowserManager } = require('../src/browser-manager');
 const { Recorder } = require('../src/recorder');
 const { CredentialStore } = require('../src/credential-store');
 
@@ -218,33 +217,9 @@ app.whenReady().then(async () => {
   // ★ 初始化凭证存储（加密保存账号密码）
   credStore = new CredentialStore(path.join(app.getPath('userData'), 'credentials.json'));
 
-  browserManager = new BrowserManager({
-    recorder,
-    onStateChange: (state) => {
-      notifyPanel('stateSync', state);
-    },
-    onElementSelected: (data) => {
-      notifyPanel('elementSelected', data);
-    },
-    onSelectionCancelled: () => {
-      notifyPanel('selectionCancelled', {});
-    },
-    panelWindowGetter: () => panelWindow,
-    userDataDir: getBrowserUserDataDir(), // ★ 持久化浏览器配置目录
-    // ★ 登录表单检测 — 通知面板显示快捷登录区域
-    onLoginFormDetected: (data) => {
-      notifyPanel('loginFormDetected', data);
-    },
-    // ★ 登录提交捕获 — 通知面板弹出"保存密码"对话框
-    onLoginSubmit: (data) => {
-      notifyPanel('loginSubmit', data);
-    },
-    // ★ 浏览器关闭 — 通知面板更新窗口置顶状态
-    onBrowserClosed: () => {
-      notifyPanel('browserClosed', {});
-    },
-  });
-  recorder.setBrowserManager(browserManager);
+  // ★ 外部浏览器（Playwright）已移除：应用仅使用应用内 webview 录制 / 预览。
+  //   browserManager 保持 null，相关 IPC 降级为"未启用外部浏览器"（见各 ipc 模块）。
+  //   若未来需要"外层独立浏览器"模式，可在此重新实例化并注入 recorder。
 
   const { setupIpc } = require('./ipc');
   setupIpc({ recorder, browserManager, panelWindowGetter: () => panelWindow, credStore });

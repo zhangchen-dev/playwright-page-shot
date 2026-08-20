@@ -5,7 +5,7 @@ import { appState } from '../../common/state.js';
 import { api, sendAction } from '../../common/api.js';
 import { updateStatus, showToast, showEnvConfigDialog, showConfirmDialog } from '../../common/feedback.js';
 import { captureWebviewData, enableWebviewSelectionMode, disableWebviewSelectionMode } from '../internal/webview-recording.js';
-import { enableExternalSelection, disableExternalSelection } from '../external/external-recording.js';
+import { closeExtraTabs } from '../../common/tabs.js';
 import { collectIntroduction } from './recording-ui.js';
 import { confirmAndSaveReRecord } from '../rerecord/rerecord-flow.js';
 
@@ -36,7 +36,7 @@ export function doCompleteMark() {
     iframeSrc: appState.selectedElementData?.iframeSrc || '',
     showNextStep,
     position,
-    pageId: appState.browserMode === 'in-app' ? 'webview' : undefined, // ★ webview 模式使用固定 pageId
+    pageId: 'webview', // ★ webview 模式使用固定 pageId
   });
 
   appState.hasSelectedElement = false;
@@ -133,9 +133,9 @@ export async function handleEndAndSave() {
     sceneCode: envConfig.sceneCode,
     envBaseUrl: envConfig.envBaseUrl,
     // ★ webview 模式数据 — 展开到顶层供 _nextStepWebview 使用
-    pageId: appState.browserMode === 'in-app' ? 'webview' : undefined,
+    pageId: 'webview',
     ...(webviewData || {}),
-    isWebviewMode: appState.browserMode === 'in-app',
+    isWebviewMode: true,
     // ★ 重录模式：传递保存模式（'replace' / 'insert' / 'replace-single'）
     reRecordSaveMode: inReRecord ? (appState._reRecordSaveMode || 'replace') : undefined,
     // ★ 移动端录制标记：透传给 recorder，供导出 selector.isMobileGuide 使用
@@ -146,18 +146,20 @@ export async function handleEndAndSave() {
 
   if (result && result.type === 'error') {
     showToast('保存失败：' + (result.message || ''), 'error', 5000);
-  } else if (result && result.type === 'saveComplete') {
+  } else   if (result && result.type === 'saveComplete') {
     showToast('保存成功：' + result.fileCount + ' 个文件', 'success');
-    // ★ 留在录制页面，询问是否关闭浏览器（登录功能未完善，默认保持打开）
+    // ★ 应用内模式：无外部浏览器。保存完成后询问是否清理录制的弹窗 tab。
+    //   （主 webview 不关闭，方便继续浏览 / 输入新地址继续录制）
     showConfirmDialog(
       '录制已完成',
-      '是否关闭浏览器？',
+      '是否关闭录制中打开的弹窗标签页？',
       async () => {
-        // 确认 → 关闭浏览器（onBrowserClosed 会触发右栏 Banner）
-        await api.closeBrowser();
+        // 确认 → 关闭除主 tab 外的所有 webview（target=_blank 等弹窗）
+        try { await closeExtraTabs(); } catch (e) { /* ignore */ }
+        updateStatus('已关闭弹窗标签页', 'var(--text-secondary)');
       },
       {
-        confirmText: '关闭浏览器',
+        confirmText: '关闭弹窗',
         cancelText: '保持打开',
         onCancel: () => {
           // 保持打开：浏览器内容继续显示，可继续浏览或输入新地址
@@ -191,15 +193,11 @@ export function updateMarkUI() {
   }
 }
 
-/** ★ 切换元素选择模式（按浏览器模式分发到对内/对外） */
+/** ★ 切换元素选择模式（应用内 webview 模式，由注入脚本完成选择） */
 export async function toggleSelectionMode() {
   if (appState.isSelectingMode) {
     // 取消选择
-    if (appState.browserMode === 'in-app') {
-      await disableWebviewSelectionMode();
-    } else {
-      await disableExternalSelection();
-    }
+    await disableWebviewSelectionMode();
     appState.isSelectingMode = false;
     appState.hasSelectedElement = false;
     appState.selectedElementData = null;
@@ -207,12 +205,6 @@ export async function toggleSelectionMode() {
     appState.hasSelectedElement = false;
     appState.selectedElementData = null;
     appState.isSelectingMode = true;
-    // ★ 根据浏览器模式调用不同的启用方法
-    if (appState.browserMode === 'in-app') {
-      await enableWebviewSelectionMode();
-    } else {
-      await enableExternalSelection();
-    }
+    await enableWebviewSelectionMode();
   }
-  updateMarkUI();
 }

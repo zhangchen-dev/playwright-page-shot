@@ -1,12 +1,11 @@
 {
   "name": "playwright-page-shot",
   "version": "1.0.0",
-  "description": "基于 Playwright 的网页录制桌面工具 - 捕获页面快照、标记元素、多步骤导出",
+  "description": "基于 Electron 应用内 webview 的网页录制桌面工具 - 捕获页面快照、标记元素、多步骤导出",
   "main": "main/main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "install:browser": "npx playwright install chromium",
     "build:win": "electron-builder --config electron-builder.config.cjs --win",
     "build:mac": "electron-builder --config electron-builder.config.cjs --mac",
     "build:linux": "electron-builder --config electron-builder.config.cjs --linux",
@@ -16,18 +15,17 @@
   },
   "dependencies": {
     "cheerio": "^1.0.0",
-    "fs-extra": "^11.3.0",
-    "playwright": "^1.52.0"
+    "fs-extra": "^11.3.0"
   },
   "devDependencies": {
     "electron": "^34.5.8",
     "electron-builder": "^26.0.0"
   },
   "keywords": [
-    "playwright",
     "recorder",
     "snapshot",
-    "electron"
+    "electron",
+    "webview"
   ],
   "license": "MIT"
 }

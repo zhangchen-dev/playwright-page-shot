@@ -18,7 +18,6 @@ import { showToast, showConfirmDialog, showDialog } from '../../common/feedback.
 import { updateStatus } from '../../common/feedback.js';
 import { requestSwitchView } from '../../common/layout.js';
 import { navigateInAppBrowser } from '../internal/webview-recording.js';
-import { navigateExternal } from '../external/external-recording.js';
 import { rerenderPanel } from '../../app.js'; // ★ 新增：用于重录流程同步刷新中间栏表单
 
 /** 启动重录流程（由 step-selector 调用） */
@@ -144,20 +143,11 @@ function showRerecordReadyToast(targetUrl, targetStepTitle, targetModuleTitle, t
   });
 }
 
-/** 自动导航浏览器到目标 URL */
+/** 自动导航到目标 URL（应用内 webview 模式） */
 async function autoNavigateBrowser(url) {
   try {
-    if (appState.browserMode === 'in-app') {
-      // 应用内浏览器模式：webview 始终可用，直接导航
-      await navigateInAppBrowser(url);
-    } else {
-      // 外层浏览器模式
-      if (!appState.browserLaunched) {
-        await navigateExternal(url);
-      } else {
-        await api.navigateTo(url);
-      }
-    }
+    // 应用内浏览器模式：webview 始终可用，直接导航
+    await navigateInAppBrowser(url);
     showToast('已导航到目标页面，请开始录制', 'success', 3000);
   } catch (err) {
     console.warn('[rerecord] 自动导航失败:', err.message);

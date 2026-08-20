@@ -43,16 +43,8 @@ export function renderQuickLoginSection() {
         // 获取完整凭证（含密码）
         const fullCred = await api.getCredential({ domain: appState.loginFormDomain, username: cred.username });
         if (fullCred) {
-          // ★ 根据浏览器模式选择填充方式
-          let success = false;
-          if (appState.browserMode === 'in-app') {
-            // 应用内浏览器：通过 executeJavaScript 直接填充 webview
-            success = await fillWebviewCredentials(fullCred.username, fullCred.password);
-          } else {
-            // 外层浏览器：通过 Playwright 填充
-            const result = await api.fillCredentials({ username: fullCred.username, password: fullCred.password });
-            success = result && result.success;
-          }
+          // ★ 应用内浏览器：通过 executeJavaScript 直接填充 webview
+          const success = await fillWebviewCredentials(fullCred.username, fullCred.password);
           if (success) {
             updateStatus('已填充账号: ' + cred.username + '，请在页面中点击登录按钮', 'var(--accent-green)');
           } else {

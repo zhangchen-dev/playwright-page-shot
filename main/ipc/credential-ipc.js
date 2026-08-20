@@ -4,7 +4,7 @@
  */
 const { ipcMain } = require('electron');
 
-function registerCredentialIpc({ browserManager, credStore }) {
+function registerCredentialIpc({ credStore }) {
   // 获取当前域名已保存的凭证列表（不含密码明文，用于 UI 展示）
   ipcMain.handle('get-credentials', (event, domain) => {
     try {
@@ -27,16 +27,8 @@ function registerCredentialIpc({ browserManager, credStore }) {
     }
   });
 
-  // 填充凭证到当前页面登录表单
-  ipcMain.handle('fill-credentials', async (event, { username, password }) => {
-    try {
-      const result = await browserManager.fillCredentials(username, password);
-      return { success: result };
-    } catch (err) {
-      console.error('[IPC] fill-credentials 失败:', err);
-      return { success: false, error: err.message };
-    }
-  });
+  // ★ 凭证填充：应用内模式由渲染进程的 webview executeJavaScript 完成
+  //   （fillWebviewCredentials），不再经过主进程的 BrowserManager。
 
   // 保存凭证（新增或更新）
   ipcMain.handle('save-credential', (event, { domain, username, password }) => {

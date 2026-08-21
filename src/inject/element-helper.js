@@ -20,6 +20,12 @@
 
   let isSelecting = false;
 
+  // ★ 元素 ID：所有页面/步骤固定一致（不编号），例如 auto_step_elementId。
+  //   平台据此用固定 selector 定位指引元素，跨页面不再带序号。
+  function generateElementId() {
+    return 'auto_step_elementId';
+  }
+
   // ===== 顶层高亮遮罩层 =====
   const overlay = document.createElement('div');
   overlay.id = '__rec_highlight_overlay';
@@ -82,13 +88,7 @@
       overlay.style.display = 'none';
       tooltip.style.display = 'none';
 
-      var baseId = 'stepElementId';
-      var elementId = baseId;
-      var counter = 1;
-      while (document.getElementById(elementId)) {
-        counter++;
-        elementId = baseId + '_' + counter;
-      }
+      var elementId = generateElementId();
       e.target.id = elementId;
 
       try {
@@ -204,14 +204,8 @@
           iOverlay.style.display = 'none';
           iTooltip.style.display = 'none';
 
-          // 在 iframe document 中生成唯一元素 ID
-          var baseId = 'stepElementId';
-          var elementId = baseId;
-          var counter = 1;
-          while (doc.getElementById(elementId)) {
-            counter++;
-            elementId = baseId + '_' + counter;
-          }
+          // 在 iframe document 中生成唯一元素 ID（从全局序号开始）
+          var elementId = generateElementId();
           e.target.id = elementId;
 
           // ★ 通过父窗口的回调通知 host

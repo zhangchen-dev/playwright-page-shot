@@ -3,7 +3,7 @@
  */
 import { appState } from '../../common/state.js';
 import { api, sendAction } from '../../common/api.js';
-import { contentEl, el, labelEl, formField, shortenUrl, urlInput } from '../../common/dom.js';
+import { contentEl, el, labelEl, formField, shortenUrl, urlInput, showLoadingOverlay, hideLoadingOverlay } from '../../common/dom.js';
 import { createSelectDropdown } from '../../common/select-dropdown.js';
 import { updateStatus, showToast, showConfirmDialog } from '../../common/feedback.js';
 import { captureWebviewData, removeWebviewElementId } from '../internal/webview-recording.js';
@@ -347,8 +347,14 @@ export function renderRecordingPhase() {
   markBtn.addEventListener('click', () => toggleSelectionMode());
   markRow.appendChild(markBtn);
 
-  // ★ 默认文案：未选中元素时自动填充“标记N”（N=当前步骤已标记数+1），减少每步输入
-  const markDefault = '标记' + ((appState.state.markedElements?.length || 0) + 1);
+  // ★ 默认文案：跨步骤继续编号 —— N = 全场景已录制标记总数 + 本步待提交数 + 1。
+  //   继续录制/重录时不会又从"标记1"开始，避免与已有步骤的标记重名。
+  const savedMarkCount = (appState.state.mainModules || []).reduce((sum, m) => (
+    sum + (m.subModules || []).reduce((s2, sm) => (
+      s2 + (sm.steps || []).reduce((s3, st) => s3 + ((st.marks || []).length), 0)
+    ), 0)
+  ), 0);
+  const markDefault = '标记' + (savedMarkCount + (appState.state.markedElements?.length || 0) + 1);
   const mainTitleField = formField({
     label: '',
     placeholder: '主标题 (mainTitle)',
@@ -468,7 +474,13 @@ export function renderRecordingPhase() {
     }
     nextStepBtn.disabled = true;
     nextStepBtn.textContent = '处理中...';
-    updateStatus('正在捕获页面...', 'var(--accent-blue)');
+    updateStatus('正在捕获页面（录制中）...', 'var(--accent-blue)');
+    // ★ 录制中：显示全局 loading 遮罩，阻止用户操作页面/菜单，直到本步捕获完成。
+    //    ★ 注意：不要在这里手动置 appState.isProcessing=true —— 「下一步」内部会先 doCompleteMark()
+    //      （fire-and-forget 发送 completeMark），其 stateSync 会在捕获期间异步到达；
+    //      若此时 isProcessing 已为 true，onStateSync 的 wasProcessing 分支会误判为“捕获结束”，
+    //      提前隐藏遮罩并重置状态，导致遮罩闪烁/时序错乱。isProcessing 交由 onCaptureProgress/onStateSync 管理。
+    showLoadingOverlay();
 
     // ★ 当前模块名/描述、当前主步骤标题，随下一步一并提交，避免重渲染后模块内容变空
     const mainModName = mainModNameInput ? mainModNameInput.value.trim() : '';
@@ -480,17 +492,26 @@ export function renderRecordingPhase() {
       try {
         const webviewData = await captureWebviewData();
         if (webviewData) {
-          webviewData.mainModName = mainModName;
-          webviewData.mainModDesc = mainModDesc;
-          webviewData.modName = modName;
-          await sendAction('nextStepWebview', webviewData);
+        webviewData.mainModName = mainModName;
+        webviewData.mainModDesc = mainModDesc;
+        webviewData.modName = modName;
+        const res = await sendAction('nextStepWebview', webviewData);
+        if (res && res.response && res.response.type === 'empty') {
+          // ★ 治本：本步页面内容为空，后端未创建空步骤（已保留标记）——提示用户等待加载后重试，而非录出空步骤
+          showToast('⚠️ 本步页面内容为空，未记录。请等待页面完全加载后重新点「下一步」', 'error', 6000);
+          updateStatus('本步内容为空未记录 — 请等待页面加载后重试「下一步」', 'var(--accent-red)');
         } else {
-          showToast('捕获页面失败：webview 未就绪', 'error');
+          updateStatus('✓ 已捕获当前步骤，可继续录制下一步', 'var(--accent-green)');
         }
+      } else {
+        showToast('捕获页面失败：webview 未就绪', 'error');
+      }
       } catch (err) {
         showToast('捕获页面失败: ' + err.message, 'error');
       }
     }
+    // ★ 结束本步：隐藏 loading 遮罩，恢复交互
+    hideLoadingOverlay();
   });
   btnRow.appendChild(nextStepBtn);
 

@@ -282,6 +282,21 @@ class Recorder {
     this._saveCurrentModuleMeta(msg);
     const marks = this.pageMarks.get(activePageId) || [];
 
+    // ★ 治本：若捕获的页面 body 为空（前端标记 bodyEmpty，或 html 的 <body> 内无任何元素/文本），
+    //   不创建空步骤、不推进 currentStepId、不清空 pageMarks（保留已标记元素供用户重试），
+    //   返回 empty 让「下一步」提示用户重新操作，从根本上杜绝「录出无法预览的空步骤」。
+    const htmlBodyEmpty = msg.bodyEmpty === true || (() => {
+      const m = (html || '').match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+      const bodyContent = m
+        ? m[1].replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<!--[\s\S]*?-->/g, '').trim()
+        : '';
+      return bodyContent.length === 0 && !/<[a-z][\s\S]*>/i.test(bodyContent);
+    })();
+    if (htmlBodyEmpty) {
+      console.warn('[Recorder] 捕获的页面 body 为空，跳过该步（不创建空步骤），保留标记供重试');
+      return { stateChanged: false, response: { type: 'empty', message: '本步页面内容为空，未记录，请等待页面加载完成后重新操作' } };
+    }
+
     try {
       this._notifyCaptureProgress('正在捕获页面（应用内浏览器）...');
 
@@ -436,7 +451,15 @@ class Recorder {
       const captureResult = (activePageId === 'webview')
         ? await this._nextStepWebview(msg)
         : await this._nextStep(msg);
-      if (!captureResult.stateChanged) return captureResult;
+      if (!captureResult.stateChanged) {
+        // ★ 末步内容为空（empty）：不阻断保存，跳过末步、继续保存其余已录制步骤；真正错误才 return
+        if (captureResult.response && captureResult.response.type === 'empty') {
+          console.warn('[Recorder] 结束保存时末步内容为空，已跳过末步捕获，继续保存其余步骤');
+          this._skippedEmptyLastStep = true;
+        } else {
+          return captureResult;
+        }
+      }
     }
 
     if (subMod && subMod.steps.length > 0) {
@@ -489,13 +512,15 @@ class Recorder {
       this.isMobileMode = false; // ★ 重置移动端标记
       this.pageMarks.clear();
       this._resetReRecord();
+      const skipped = !!this._skippedEmptyLastStep;
+      this._skippedEmptyLastStep = false;
 
       console.log(`[Recorder] 录制已结束，文件已保存到: ${result.outputDir}`);
       this.lastExportDir = result.outputDir;
       this._notifyStateChange();
       return {
         stateChanged: true,
-        response: { type: 'saveComplete', fileCount: result.fileCount, outputDir: result.outputDir },
+        response: { type: 'saveComplete', fileCount: result.fileCount, outputDir: result.outputDir, skippedEmptyLastStep: skipped },
       };
     } catch (err) {
       console.error('[Recorder] 导出失败:', err);
@@ -900,7 +925,12 @@ class Recorder {
       const snapshot = allSteps[i];
       if (!snapshot.htmlContent) continue;
       // ★ 全局清除所有导航脚本（含陈旧的 step3/step10/step13 等重复脚本）
-      const navScriptGlobalRegex = /<script>\s*\(function\(\)\s*\{[\s\S]*?var nextStep = "[^"]*";[\s\S]*?\}\)\(\);\s*<\/script>/g;
+      //   关键修复：旧正则 /<script>\s*\(function\(\)\s*\{[\s\S]*?var nextStep = "...";[\s\S]*?\}\)\(\);<\/script>/
+      //   会从页面自身的 <script>(function(){...})(); IIFE（如 __R_ORIGIN__ 加载器）一路贪婪/惰性吞到本录制器注入的
+      //   导航脚本的 var nextStep，从而把中间的整个 <body> 正文删掉（表现为"原本可预览的步骤变空白/不可预览"）。
+      //   现改为仅靠本录制器导航脚本的特征匹配：<script>(function(){ 之后须紧跟 var elementIds（页面自身脚本不会有此变量），
+      //   且二者之间不允许出现 '<' 标签，因此绝不会跨越到 <body> 内的标签，精确只删除本录制器脚本。
+      const navScriptGlobalRegex = /<script>\s*\(function\(\)\s*\{[^<]*?var elementIds\s*=\s*\[[\s\S]*?var nextStep = "[^"]*";[\s\S]*?el\.style\.cursor = 'pointer';[\s\S]*?\}\)\(\);\s*<\/script>/g;
       snapshot.htmlContent = snapshot.htmlContent.replace(navScriptGlobalRegex, '');
 
       // 非末页且有录制元素 → 注入唯一一条规范导航脚本

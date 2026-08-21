@@ -268,6 +268,76 @@ export async function fillWebviewCredentials(username, password) {
   }
 }
 
+/**
+ * ★ 捕获前就绪等待 — 根因修复：SPA / 异步页面（尤其 qiankun 微前端 + BPM 画布这类重页面）在
+ *   did-finish-load 之后 body 可能尚未渲染出内容，此时若直接克隆 documentElement，会录到
+ *   「空 body」的快照，导致该步骤预览空白（如"公文·薪福通"末步、sen_code_tyoCtt 末步、
+ *   sen_code_vl98MI 第 1/2 步的历史损坏）。
+ *   仅当 body 明显为空时才等待；正常已加载页面第一次检测即返回，不影响性能。
+ */
+const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function _isBodyReady(webview) {
+  try {
+    return await webview.executeJavaScript(
+      '(function(){var b=document.body;if(!b)return false;' +
+      'if(document.readyState==="loading")return false;' + // DOM 尚未解析完成
+      'var text=(b.innerText||"").trim();' +
+      'var kids=b.children.length;' +
+      'var media=b.querySelectorAll("img,svg,canvas,video,iframe,table").length;' +
+      'return (text.length>15) || (kids>3) || (media>0 && kids>0);})()'
+    );
+  } catch (e) {
+    return true; // 检测失败不阻断，放行
+  }
+}
+
+/**
+ * ★ 等待同源 iframe（如 xft 的 SimulatorRenderer / 文档预览）也渲染出内容。
+ *   主壳 body 可能很快就有内容，但真正要录的文档/流程画布还在 iframe 里异步加载；
+ *   跨域 iframe 无法读取 contentDocument，直接跳过（本来就录不到）。
+ */
+async function _waitForIframesReady(webview, maxMs) {
+  maxMs = maxMs || 8000;
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    let ready = true;
+    try {
+      ready = await webview.executeJavaScript(
+        '(function(){' +
+        'var ifs=Array.from(document.querySelectorAll("iframe"));' +
+        'for(var i=0;i<ifs.length;i++){' +
+        '  var src=ifs[i].src||"";' +
+        '  if(src==="about:blank"||src.indexOf("data:")===0)continue;' +
+        '  try{' +
+        '    var d=ifs[i].contentDocument;' +
+        '    if(d&&d.body){' +
+        '      var t=(d.body.innerText||"").trim();' +
+        '      if(t.length>0||d.body.children.length>3)continue;' +
+        '      return false;' + // 同源 iframe 还是空的 → 再等等
+        '    }' +
+        '  }catch(e){/* 跨域 iframe 无法读取，跳过 */}' +
+        '}' +
+        'return true;' +
+        '})()'
+      );
+    } catch (e) { return; }
+    if (ready) return;
+    await _sleep(400);
+  }
+}
+
+async function _waitForBodyContent(webview, maxMs) {
+  maxMs = maxMs || 15000; // 重页面（qiankun 微前端 + BPM 编辑器）加载慢，放宽到 15s
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    let ready = false;
+    try { ready = await _isBodyReady(webview); } catch (e) { return; }
+    if (ready) return;
+    await _sleep(400);
+  }
+}
+
 /** ★ 捕获 webview 页面数据（用于录制快照） */
 export async function captureWebviewData() {
   // ★ 捕获当前激活 tab 的页面（新 tab 内录制 HTML 依赖这里）
@@ -295,6 +365,11 @@ export async function captureWebviewData() {
       setTimeout(() => reject(new Error(label + ' 超时 (' + ms + 'ms)')), ms)
     ),
   ]);
+
+  // ★ 捕获前就绪等待：避免在页面 body 尚未渲染完成时捕获到空页面
+  try { await _waitForBodyContent(webview); } catch (e) { /* ignore */ }
+  // ★ 同源 iframe 内容就绪等待（如 xft SimulatorRenderer 里渲染的文档/流程内容）
+  try { await _waitForIframesReady(webview); } catch (e) { /* ignore */ }
 
   // 2. 获取清理后的 HTML（移除 script、事件处理器等）
   //    ★ 在克隆前，先将所有 canvas 元素转为 <img>（SpreadJS/canvas 页面无法用纯 HTML 展示）
@@ -423,7 +498,8 @@ export async function captureWebviewData() {
     '})()',
   ].join('\n');
 
-  try {
+  // ★ 单次捕获：清理 HTML（canvas 转图片 + 移除脚本/事件）+ CSS + iframe + body 空检测
+  async function _doCapture() {
     // ★ 先将 canvas 转为图片（SpreadJS 等 canvas 页面无法用纯 HTML 展示）
     try {
       const canvasCount = await withTimeout(webview.executeJavaScript(canvasReplaceCode), 3000, 'canvas 替换');
@@ -458,7 +534,31 @@ export async function captureWebviewData() {
       console.warn('[panel] iframe 捕获失败（不阻断主流程）:', e.message);
     }
 
-    return { url, html, cssContents, iframes, baseURI };
+    // ★ 检测 body 是否仍为空（就绪等待后仍为空 → 上层提示用户重录该步）
+    let bodyEmpty = false;
+    try {
+      bodyEmpty = await withTimeout(webview.executeJavaScript(
+        '(function(){var b=document.body;if(!b)return true;' +
+        'var text=(b.innerText||"").trim();' +
+        'return text.length===0 && b.children.length===0;})()'
+      ), 1500, 'body 空检测').catch(() => false);
+    } catch (e) {}
+
+    return { url, html, cssContents, iframes, baseURI, bodyEmpty: !!bodyEmpty };
+  }
+
+  try {
+    let result = await _doCapture();
+    // ★ 自动重试：首次捕获 body 为空（偶发页面尚未渲染完）时，再等一段时间重新捕获，最多 2 次。
+    //   从源头把「录出无法预览的空步骤」的概率降到极低；若重试后仍为空，才返回 bodyEmpty:true 交给上层。
+    let retries = 0;
+    while (result && result.bodyEmpty && retries < 2) {
+      retries++;
+      console.warn('[panel] 首次捕获 body 为空，第 ' + retries + ' 次重试（再等 5s）...');
+      await _waitForBodyContent(webview, 5000);
+      result = await _doCapture();
+    }
+    return result;
   } catch (err) {
     console.warn('[panel] 捕获 webview 数据失败:', err.message);
     return null;

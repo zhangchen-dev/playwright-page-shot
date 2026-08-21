@@ -4,6 +4,7 @@
 import { appState } from '../../common/state.js';
 import { api, sendAction } from '../../common/api.js';
 import { updateStatus, showToast, showEnvConfigDialog, showConfirmDialog } from '../../common/feedback.js';
+import { showLoadingOverlay, hideLoadingOverlay } from '../../common/dom.js';
 import { captureWebviewData, enableWebviewSelectionMode, disableWebviewSelectionMode } from '../internal/webview-recording.js';
 import { closeExtraTabs } from '../../common/tabs.js';
 import { collectIntroduction } from './recording-ui.js';
@@ -111,43 +112,61 @@ export async function handleEndAndSave() {
   const intro = collectIntroduction();
 
   updateStatus('正在处理和保存...', 'var(--accent-blue)');
+  // ★ 保存中：显示全局 loading 遮罩，阻止用户操作，直到保存完成
+  //    （isProcessing 交由 onCaptureProgress/onStateSync 管理，这里只显式控制遮罩）
+  showLoadingOverlay();
 
-  // ★ 应用内浏览器模式：先捕获 webview 页面数据
-  //    增加 browserLaunched 守卫：未启动浏览器时跳过，避免在 about:blank 上 executeJavaScript 挂起
   let webviewData = null;
-  if (appState.browserLaunched && appState.browserMode === 'in-app') {
-    try {
-      webviewData = await captureWebviewData();
-    } catch (err) {
-      console.warn('[panel] 捕获 webview 数据失败:', err.message);
+  let result = null;
+  try {
+    // ★ 应用内浏览器模式：先捕获 webview 页面数据
+    //    增加 browserLaunched 守卫：未启动浏览器时跳过，避免在 about:blank 上 executeJavaScript 挂起
+    if (appState.browserLaunched && appState.browserMode === 'in-app') {
+      try {
+        webviewData = await captureWebviewData();
+        if (webviewData && webviewData.bodyEmpty) {
+          showToast('末步页面内容可能为空，正在尝试保存其余步骤…', 'info', 4000);
+        }
+      } catch (err) {
+        console.warn('[panel] 捕获 webview 数据失败:', err.message);
+      }
     }
-  }
 
-  const result = await sendAction('endAndSave', {
-    modName: modNameInput ? modNameInput.value.trim() : '',
-    mainModName: mainModNameInput ? mainModNameInput.value.trim() : '',
-    mainModDesc: mainModDescInput ? mainModDescInput.value.trim() : '',
-    resourceBaseUrl: envConfig.envBaseUrl, // 向后兼容
-    introduction: intro,
-    environment: envConfig.environment,
-    sceneCode: envConfig.sceneCode,
-    envBaseUrl: envConfig.envBaseUrl,
-    // ★ webview 模式数据 — 展开到顶层供 _nextStepWebview 使用
-    pageId: 'webview',
-    ...(webviewData || {}),
-    isWebviewMode: true,
-    // ★ 重录模式：传递保存模式（'replace' / 'insert' / 'replace-single'）
-    reRecordSaveMode: inReRecord ? (appState._reRecordSaveMode || 'replace') : undefined,
-    // ★ 移动端录制标记：透传给 recorder，供导出 selector.isMobileGuide 使用
-    isMobile: appState.isMobileMode,
-  });
+    result = await sendAction('endAndSave', {
+      modName: modNameInput ? modNameInput.value.trim() : '',
+      mainModName: mainModNameInput ? mainModNameInput.value.trim() : '',
+      mainModDesc: mainModDescInput ? mainModDescInput.value.trim() : '',
+      resourceBaseUrl: envConfig.envBaseUrl, // 向后兼容
+      introduction: intro,
+      environment: envConfig.environment,
+      sceneCode: envConfig.sceneCode,
+      envBaseUrl: envConfig.envBaseUrl,
+      // ★ webview 模式数据 — 展开到顶层供 _nextStepWebview 使用
+      pageId: 'webview',
+      ...(webviewData || {}),
+      isWebviewMode: true,
+      // ★ 重录模式：传递保存模式（'replace' / 'insert' / 'replace-single'）
+      reRecordSaveMode: inReRecord ? (appState._reRecordSaveMode || 'replace') : undefined,
+      // ★ 移动端录制标记：透传给 recorder，供导出 selector.isMobileGuide 使用
+      isMobile: appState.isMobileMode,
+    });
+  } finally {
+    // ★ 结束保存：隐藏 loading 遮罩，恢复交互
+    hideLoadingOverlay();
+  }
   // 清理临时状态
   appState._reRecordSaveMode = null;
 
   if (result && result.type === 'error') {
     showToast('保存失败：' + (result.message || ''), 'error', 5000);
-  } else   if (result && result.type === 'saveComplete') {
+  } else if (result && result.type === 'saveComplete') {
     showToast('保存成功：' + result.fileCount + ' 个文件', 'success');
+    let status = '🎉 录制完成！已保存 ' + result.fileCount + ' 个文件，可前往「场景管理」预览';
+    if (result.skippedEmptyLastStep) {
+      status += '（末步内容为空已跳过，可在场景管理重录该步）';
+      showToast('⚠️ 末步内容为空已跳过，可在场景管理重录该步', 'error', 5000);
+    }
+    updateStatus(status, 'var(--accent-green)');
     // ★ 应用内模式：无外部浏览器。保存完成后询问是否清理录制的弹窗 tab。
     //   （主 webview 不关闭，方便继续浏览 / 输入新地址继续录制）
     showConfirmDialog(

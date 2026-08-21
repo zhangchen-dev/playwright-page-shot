@@ -12,8 +12,19 @@
     <div id="pageBody" class="pageBody showMask">
       <!-- 页面区域 -->
       <div class="iframeContainer">
+        <!-- 横幅主题（顶部导航栏） -->
+        <div id="topNav" class="topbarContainer">
+          <div class="titleDiv">
+            <span class="topbarTitle">
+              <span class="topbarSpan lastDetailName" id="topbarTitle">演示中心</span>
+            </span>
+            <span class="topbarBtn" onclick="DemoApp.exitDemoGuide()">退出演示</span>
+          </div>
+        </div>
+
         <!-- iframe页面 -->
         <div class="iframeContent">
+          <div class="iframeContentBg"></div>
           <iframe
             id="demoIframe"
             name="demo_iframe"
@@ -50,7 +61,7 @@
             </div>
           </div>
           <div id="btnContainer" class="btnContainer" style="display: none">
-            <span class="btnDisabled" onclick="DemoApp.showSceneStory()"
+            <span id="sceneStoryBtn" onclick="DemoApp.toggleSceneStory()"
               >场景故事</span
             >
             <span onclick="DemoApp.showGuide()">唤起气泡</span>

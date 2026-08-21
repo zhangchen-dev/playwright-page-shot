@@ -93,6 +93,13 @@
         for (var k = 0; k < step.subStepList.length; k++) {
           var subStep = step.subStepList[k];
           var url = `../${data.demonstrationCode}/step${subStepIdx++}.html`;
+          // ★ 移动端标记优先级：1) 子步骤自身 selector.isMobileGuide（map-preview 按页面内容反推，
+          //   解决同一场景内 PC 步骤与移动步骤混合时全局开关污染全部步骤的问题）；
+          //   2) 回退到父 introduction.isMobileGuide（兼容旧录制/未带 selector 的场景）。
+          var ssSelector = subStep.selector || {};
+          var subStepMobile = typeof ssSelector.isMobileGuide === 'boolean'
+            ? !!ssSelector.isMobileGuide
+            : !!(introduction && introduction.isMobileGuide);
           subStepList.push({
             ...subStep,
             url: [url.replace('../', '/')],
@@ -100,9 +107,9 @@
             mainTitle: subStep.title,
             title: subStep.content,
             selector: {
-              placeSelector: '[data-marked]',
-              clickSelector: '[data-marked]',
-              isMobileGuide: introduction.isMobileGuide || false,
+              placeSelector: ssSelector.placeSelector || '[data-marked]',
+              clickSelector: ssSelector.clickSelector || '[data-marked]',
+              isMobileGuide: subStepMobile,
             },
             allowClick: true,
           });
@@ -282,6 +289,82 @@
   }
 
   /**
+   * 判断当前步骤是否为移动端场景
+   * 仅检查子步骤级别的 isMobileGuide 配置
+   */
+  function isMobileScene() {
+    if (!AppState || !AppState.modelList) return false;
+
+    var isUnStart = AppState.stepState === '0';
+    if (isUnStart) {
+      var firstStep = AppState.modelList[0] && AppState.modelList[0].stepList[0];
+      var firstSubStep = firstStep && firstStep.subStepList && firstStep.subStepList[0];
+      return !!(firstSubStep && firstSubStep.selector && firstSubStep.selector.isMobileGuide);
+    }
+
+    var modelIdx = AppState.currentStep[0];
+    var stepIdx = AppState.currentStep[1];
+    var subStepIdx = AppState.currentStep[2];
+
+    var model = AppState.modelList[modelIdx];
+    if (!model) return false;
+    var step = model.stepList[stepIdx];
+    if (!step) return false;
+    if (subStepIdx < 0 || !step.subStepList[subStepIdx]) return false;
+
+    var subStep = step.subStepList[subStepIdx];
+    return !!(subStep.selector && subStep.selector.isMobileGuide);
+  }
+
+  /**
+   * 计算移动端 iframe 尺寸
+   * 根据窗口高度动态计算手机外壳尺寸（422×852 基准，top=80/bottom=27 边距）
+   */
+  function handleMobileResize() {
+    var iframeContent = $('.iframeContent');
+    var iframe = $('#demoIframe');
+    if (!iframeContent || !iframe) return;
+
+    if (!isMobileScene()) {
+      // 非移动端场景，清除内联样式（避免残留手机壳尺寸）
+      iframeContent.style.width = '';
+      iframeContent.style.height = '';
+      iframe.style.width = '';
+      iframe.style.height = '';
+      iframe.style.top = '';
+      iframe.style.left = '';
+      // ★ v21：清除残留 transform（PC 步骤遗留的 transform:scale 在连续切换到移动端时会让
+      //   移动端内容也被缩放并错位到角落，表现为「底部超出」或「内容偏移」）。
+      iframe.style.transform = '';
+      return;
+    }
+
+    var mobileTop = 80;
+    var mobileBottom = 27;
+    // ★ 关键：必须用视口高度（documentElement.clientHeight），不能用 document.body.clientHeight。
+    //   .pageBody 是 position:absolute，不撑开 body，在 Electron webview 里 body.clientHeight 趋近 0，
+    //   会导致手机壳被 min/max 钳成 280×450 的过小壳子；原型在普通标签页 body 撑满视口所以正常。
+    var viewportH = document.documentElement.clientHeight || window.innerHeight || 0;
+    var mobileHeight = viewportH - mobileTop - mobileBottom;
+    if (mobileHeight > 852) mobileHeight = 852;
+    else if (mobileHeight < 450) mobileHeight = 450;
+
+    var mobileWidth = Math.round((mobileHeight / 852) * 422);
+    if (mobileWidth < 280) mobileWidth = 280;
+
+    // 设置 iframeContent 尺寸（手机外壳）
+    iframeContent.style.width = mobileWidth + 'px';
+    iframeContent.style.height = mobileHeight + 'px';
+
+    // 计算 iframe 内部尺寸（按比例缩放 375 设计宽）
+    var scale = mobileWidth / 422;
+    iframe.style.width = Math.round(375 * scale) + 'px';
+    iframe.style.top = Math.round(60 * scale) + 'px';
+    iframe.style.left = Math.round(22 * scale) + 'px';
+    iframe.style.height = 'calc(100% - ' + Math.round(116 * scale) + 'px)';
+  }
+
+  /**
    * 更新页面状态样式
    */
   function updatePageState() {
@@ -292,6 +375,7 @@
     removeClass(pageBody, 'showMask');
     removeClass(pageBody, 'mapClose');
     removeClass(pageBody, 'loaddingBody');
+    removeClass(pageBody, 'mobileBody');
 
     // 添加对应状态类
     if (AppState.stepState === '0') {
@@ -303,6 +387,14 @@
     if (AppState.isLoading) {
       addClass(pageBody, 'loaddingBody');
     }
+
+    // 移动端场景检测（外部移动端壳子）
+    if (isMobileScene()) {
+      addClass(pageBody, 'mobileBody');
+    }
+
+    // 更新移动端外壳尺寸
+    handleMobileResize();
   }
 
   /**
@@ -393,6 +485,9 @@
     var iframe = $('#demoIframe');
     if (iframe && url) {
       iframe.src = url;
+      // ★ v21：派发自定义事件让 FIT_SCRIPT 立即响应（不等 iframe load 事件，
+      //   避免连续步骤切换时 60ms 延迟导致残留 transform 影响视觉）。
+      try { window.dispatchEvent(new CustomEvent('map-step-changed')); } catch (e) {}
     }
   }
 
@@ -443,6 +538,7 @@
     // 更新标题
     $('#mapTitle').innerText = config.sceneName || '';
     $('#mapSubTitle').innerText = config.subSceneName || '';
+    $('#topbarTitle').innerText = config.sceneName || '';
 
     // 渲染模块卡片
     renderModuleCards();
@@ -450,6 +546,7 @@
     // 更新页面状态
     updatePageState();
     updateButtons();
+    updateSceneStoryBtn();
 
     // 如果从 sessionStorage 恢复了正在进行中的状态，需要更新 iframe 地址
     if (AppState.stepState === '1' && AppState.currentStep[0] >= 0 && AppState.currentStep[1] >= 0) {
@@ -480,6 +577,9 @@
 
     // 注册 iframe 消息监听
     registerIframeMessageListener();
+
+    // 监听窗口 resize 事件，重新计算移动端外壳尺寸
+    window.addEventListener('resize', handleMobileResize);
   }
 
   /**
@@ -518,6 +618,7 @@
     updatePageState();
     updateButtons();
     updateSceneStory();
+    updateSceneStoryBtn();
 
     setTimeout(hideLoading, 500);
   }
@@ -587,6 +688,7 @@
     updatePageState();
     updateStepState();
     updateSceneStory();
+    updateSceneStoryBtn();
     updateButtons();
   }
 
@@ -651,6 +753,8 @@
     updatePageState();
     updateButtons();
     showFinishDialog();
+    // ★ v20：演示结束（"返回演示中心" 按钮）→ 通知外层退出全屏预览
+    sendExitFullscreen('finish');
   }
 
   /**
@@ -687,6 +791,7 @@
     if (AppState.stepState === '0') return;
     setState({ sceneStoryShow: true });
     updateSceneStory();
+    updateSceneStoryBtn();
   }
 
   /**
@@ -695,6 +800,34 @@
   function hideSceneStory() {
     setState({ sceneStoryShow: false });
     updateSceneStory();
+    updateSceneStoryBtn();
+  }
+
+  /**
+   * 切换场景故事显示/隐藏
+   */
+  function toggleSceneStory() {
+    if (AppState.stepState === '0') return;
+    if (AppState.sceneStoryShow) {
+      hideSceneStory();
+    } else {
+      showSceneStory();
+    }
+  }
+
+  /**
+   * 更新场景故事按钮状态
+   * 显示中：置灰不可点击（btnDisabled）
+   * 已关闭：高亮可点击
+   */
+  function updateSceneStoryBtn() {
+    var btn = $('#sceneStoryBtn');
+    if (!btn) return;
+    if (AppState.sceneStoryShow) {
+      addClass(btn, 'btnDisabled');
+    } else {
+      removeClass(btn, 'btnDisabled');
+    }
   }
 
   /**
@@ -717,6 +850,9 @@
    */
   function exitDemoGuide() {
     if (confirm('确定要退出演示吗？')) {
+      // ★ v20：先通知外层退出全屏预览，再重置状态 + 刷新页面
+      //   （reload 之后 webview 内容销毁，所以必须在 reload 前发送 IPC）
+      sendExitFullscreen('exit');
       // 重置状态
       setState({
         stepState: '0',
@@ -727,6 +863,19 @@
       // 刷新页面或跳转
       window.location.reload();
     }
+  }
+
+  /**
+   * ★ v20：通过 webview preload 暴露的 __recSendToHost 向宿主面板发送「退出全屏」事件。
+   *   宿主面板收到后调用 toggleFullscreenPreview(false)，恢复 sidebar+中间列+顶部工具栏。
+   *   无 IPC 环境（如浏览器直接打开地图）下静默忽略。
+   */
+  function sendExitFullscreen(reason) {
+    try {
+      if (typeof window.__recSendToHost === 'function') {
+        window.__recSendToHost('preview-exit-fullscreen', { reason: reason || 'unknown' });
+      }
+    } catch (e) {}
   }
 
   /**
@@ -929,6 +1078,7 @@
     toggleMap: toggleMap,
     showSceneStory: showSceneStory,
     hideSceneStory: hideSceneStory,
+    toggleSceneStory: toggleSceneStory,
     showGuide: showGuide,
     clickNextStep: clickNextStep,
     exitDemoGuide: exitDemoGuide,
@@ -940,6 +1090,7 @@
 
   // 暴露到全局
   global.DemoApp = DemoApp;
+  global.DemoApp.handleMobileResize = handleMobileResize;
 
   // DOM 加载完成后初始化
   if (document.readyState === 'complete' || document.readyState === 'interactive') {

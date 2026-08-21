@@ -441,8 +441,12 @@ class Recorder {
 
     // 保存 introduction 到当前主步骤
     const subMod = this._getCurrentSubModule();
-    if (subMod && introduction !== undefined) {
-      subMod.introduction = introduction;
+    if (subMod) {
+      // ★ 把本步骤的移动端录制标记写入 subModule.introduction，使「移动/PC」按步骤持久化，
+      //   支持同一场景内混合 PC 步骤与移动步骤（地图预览按当前步骤各自的标记决定展示手机壳还是 PC 全屏）。
+      subMod.introduction = Object.assign({}, introduction || subMod.introduction || {}, {
+        isMobileGuide: !!isMobile,
+      });
     }
 
     const marks = this.pageMarks.get(activePageId) || [];
@@ -629,6 +633,8 @@ class Recorder {
     this.elementIdCounter = 0;
     this.environment = data.environment || 'local';
     this.envBaseUrl = data.envBaseUrl || '';
+    // ★ 恢复移动端录制标记（供"结束并保存"时 selector.isMobileGuide 使用）
+    this.isMobileMode = !!data.isMobileMode;
     this.resourceBaseUrl = '';
     this.phase = 'recording';
     this.currentStepId = this._generateStepId();
@@ -674,6 +680,8 @@ class Recorder {
     this.mainModules = JSON.parse(JSON.stringify(data.mainModules));
     this.environment = data.environment || 'local';
     this.envBaseUrl = data.envBaseUrl || '';
+    // ★ 恢复移动端录制标记（供"结束并保存"时 selector.isMobileGuide 使用）
+    this.isMobileMode = !!data.isMobileMode;
     this.resourceBaseUrl = '';
     this.stepCount = data.stepCount || 0;
     this.elementIdCounter = 0;

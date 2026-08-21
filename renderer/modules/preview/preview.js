@@ -143,12 +143,13 @@ export function closeRightPanel() {
   updateStatus('', '');
 }
 
-/** ★ 全屏预览切换 — 隐藏左栏+中间列，右栏占满 */
+/** ★ 全屏预览切换 — 隐藏左栏+中间列+顶部工具栏，仅留预览内容 + 浮动展开按钮 */
 export function toggleFullscreenPreview(force) {
   const isFullscreen = document.body.classList.contains('fullscreen-preview');
   const shouldEnter = (force === undefined) ? !isFullscreen : force;
 
   const fsBtn = document.getElementById('fullscreenBtn');
+  const rightColumnEl = document.getElementById('rightColumn');
 
   if (shouldEnter) {
     // 进入全屏：确保右栏已打开且为预览模式
@@ -158,12 +159,16 @@ export function toggleFullscreenPreview(force) {
     }
     document.body.classList.add('fullscreen-preview');
     if (fsBtn) fsBtn.classList.add('active');
+    // ★ 同时收起顶部工具栏（保留浮动展开按钮），达成"收起第二栏 + 顶部按钮 + 带地图的预览"的最简视图
+    if (rightColumnEl) rightColumnEl.classList.add('controls-collapsed');
     // 全屏后重新计算缩放（容器尺寸变大）
     requestAnimationFrame(() => updateWebviewScale());
   } else {
     // 退出全屏：恢复布局
     document.body.classList.remove('fullscreen-preview');
     if (fsBtn) fsBtn.classList.remove('active');
+    // ★ 恢复顶部工具栏
+    if (rightColumnEl) rightColumnEl.classList.remove('controls-collapsed');
     updateLayout();
     // 等待窗口尺寸恢复后重新计算缩放
     setTimeout(() => updateWebviewScale(), 250);

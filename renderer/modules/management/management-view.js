@@ -5,7 +5,7 @@ import { appState } from '../common/state.js';
 import { api } from '../common/api.js';
 import { el } from '../common/dom.js';
 import { showToast, showConfirmDialog } from '../common/feedback.js';
-import { openPreview, toggleFullscreenPreview } from '../preview/preview.js';
+import { openPreview } from '../preview/preview.js';
 import { openMapPreview } from '../preview/map-preview.js';
 import { requestSwitchView } from '../common/layout.js';
 
@@ -101,38 +101,41 @@ export function buildScenarioCard(exp) {
   // Row 1 ── 预览 + 录制
   const row1 = el('div', 'action-group-row');
 
-  // —— 预览组：常规预览 / 全屏预览 / 展示地图 ——
+  // —— 预览组：合并的全屏预览+地图 / 页面预览 ——
+  // ★ 用户要求（v19）：
+  //   1) 「⛶ 全屏预览」与「🗺️ 展示地图」合并为一个按钮「⛶ 全屏预览，展示地图」
+  //      —— 进入全屏预览模式（收起 sidebar+中间列+顶部工具栏），同时载入地图预览。
+  //   2) 新增「📄 页面预览」—— 保持菜单显示（不收起 sidebar），在右栏打开预览，
+  //      由 step-selector.js 渲染「◀ / 下拉 / ▶ / 重录该步骤」控件，
+  //      主要作为「重录该步骤」的入口。
+  //   最终场景卡片预览区共 2 个按钮。
   const previewGroup = el('div', 'action-group');
   previewGroup.appendChild(el('span', 'action-group-label', '预览'));
 
-  const previewBtn = el('button', 'scenario-action-btn preview', '🔍 预览');
-  previewBtn.addEventListener('click', async () => {
+  const fullscreenMapBtn = el('button', 'scenario-action-btn preview', '⛶ 全屏预览');
+  fullscreenMapBtn.title = '进入全屏预览模式并展示地图（含手机壳）';
+  fullscreenMapBtn.addEventListener('click', async () => {
     if (exp.htmlFiles && exp.htmlFiles.length > 0) {
+      // openMapPreview 内部会自动调用 toggleFullscreenPreview(true)
+      await openMapPreview(exp);
+    } else {
+      showToast('该场景没有可预览的文件', 'error');
+    }
+  });
+  previewGroup.appendChild(fullscreenMapBtn);
+
+  const pagePreviewBtn = el('button', 'scenario-action-btn preview', '📄 页面预览');
+  pagePreviewBtn.title = '在右栏打开页面预览（保持菜单显示），可下拉选择步骤并重录该步骤';
+  pagePreviewBtn.addEventListener('click', async () => {
+    if (exp.htmlFiles && exp.htmlFiles.length > 0) {
+      // ★ 仅打开右栏预览，不进入全屏、不收起菜单——sidebar/middle column/顶部工具栏全部保留
+      //   右栏里由 renderPreviewStepSelector 渲染步骤下拉 + 重录按钮。
       await openPreview(exp.htmlFiles[0].filePath, exp.htmlFiles, exp.dirName);
     } else {
       showToast('该场景没有可预览的文件', 'error');
     }
   });
-  previewGroup.appendChild(previewBtn);
-
-  const fullscreenPreviewBtn = el('button', 'scenario-action-btn preview', '⛶ 全屏预览');
-  fullscreenPreviewBtn.addEventListener('click', async () => {
-    if (exp.htmlFiles && exp.htmlFiles.length > 0) {
-      await openPreview(exp.htmlFiles[0].filePath, exp.htmlFiles, exp.dirName);
-      // 等待窗口尺寸调整完成后进入全屏
-      setTimeout(() => toggleFullscreenPreview(true), 300);
-    } else {
-      showToast('该场景没有可预览的文件', 'error');
-    }
-  });
-  previewGroup.appendChild(fullscreenPreviewBtn);
-
-  // ★ 展示地图（仅预览：将录制步骤作为内容展示在地图页 iframe 中，不影响导出）
-  const mapBtn = el('button', 'scenario-action-btn preview', '🗺️ 展示地图');
-  mapBtn.addEventListener('click', async () => {
-    await openMapPreview(exp);
-  });
-  previewGroup.appendChild(mapBtn);
+  previewGroup.appendChild(pagePreviewBtn);
   row1.appendChild(previewGroup);
 
   // —— 录制组：继续录制（仅有录制元数据的场景显示） ——

@@ -345,7 +345,7 @@
   font-weight: 600;
 }
 
-/* ★ 全屏预览模式 — 隐藏左栏+中间列，右栏占满 */
+/* ★ 全屏预览模式 — 收起左栏（最左侧菜单）+ 中间列 + 列分界线，右栏占满 */
 body.fullscreen-preview #sidebar,
 body.fullscreen-preview #mainColumn,
 body.fullscreen-preview #columnDivider {
@@ -360,6 +360,11 @@ body.fullscreen-preview #rightColumn {
 }
 
 body.fullscreen-preview #rightContent {
+  display: none !important;
+}
+
+/* ★ v19：全屏预览时隐藏步骤选择器——地图预览自带导航（点击地图节点跳转），重复且占空间 */
+body.fullscreen-preview .preview-step-selector {
   display: none !important;
 }
 

@@ -207,6 +207,15 @@ export function setupWebviewIpcListener(targetWebview) {
           .then((m) => m.requestNewTab(newUrl, channel))
           .catch((err) => console.error('[panel] ' + channel + ' 开新 tab 失败:', err));
       }
+    } else if (channel === 'preview-exit-fullscreen') {
+      // ★ v20：地图预览内"退出演示" / "完成演示 → 返回演示中心" 触发 → 退出全屏预览
+      import('../../preview/preview.js')
+        .then((m) => {
+          if (typeof m.toggleFullscreenPreview === 'function') {
+            m.toggleFullscreenPreview(false);
+          }
+        })
+        .catch((err) => console.warn('[panel] preview-exit-fullscreen 处理失败:', err));
     }
   });
 }

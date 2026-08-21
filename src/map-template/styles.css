@@ -54,6 +54,69 @@ ul li {
   height: 100%;
 }
 
+/* ==================== 移动端模式（外部移动端壳子） ==================== */
+.pageBody.mobileBody {
+  background: url('./img/autouse_bg.png') #fff no-repeat center 0;
+  background-size: 1280px 760px;
+}
+
+.pageBody.mobileBody .iframeContainer {
+  overflow: auto;
+}
+
+.pageBody.mobileBody .iframeContent {
+  position: absolute;
+  top: 80px;
+  right: auto;
+  bottom: 27px;
+  left: 50%;
+  width: 422px;
+  height: auto;
+  min-height: 450px;
+  max-height: 852px;
+  transform: translateX(-50%);
+  /* ★ 关键：手机壳裁剪内容。iframe 内部页面无论多长，溢出壳子的部分必须不可见，
+     否则用户上下滚动时会看到内容"溢出"到壳子边界之外（用户反馈"页面超出壳子"）。
+     同时配合 overflow:hidden 让底部 m_bg.png 圆角与内容边界对齐。 */
+  overflow: hidden;
+  /* 让外壳自身也呈圆角矩形，与 m_bg.png 圆角对齐（避免滚动条贴着直角边缘） */
+  border-radius: 36px;
+}
+
+.pageBody.mobileBody .iframeContentBg {
+  display: block;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  left: 0;
+  top: 0;
+  background: url('./img/m_bg.png') transparent no-repeat center center;
+  background-size: 100% 100%;
+  /* ★ 不要给 iframeContentBg 加 z-index——它会盖在 iframe 之上，导致移动端壳子内
+     iframe 内容被遮住（回归：v17 第一次实现加了 z-index:2 + iframe z-index:1，
+     后果是 m_bg.png 即便透明也遮住 iframe）。保持默认堆叠顺序，让后渲染的 iframe 居上即可。 */
+  pointer-events: none;
+}
+
+.pageBody.mobileBody .iframeContent > iframe {
+  position: absolute;
+  top: 60px;
+  left: 22px;
+  width: 375px;
+  height: calc(100% - 116px);
+  background-color: #fff;
+  /* ★ iframe 自身也圆角（顶部平直、底部圆角），与手机壳视觉一致。
+     不要给 iframe 加 z-index（会与默认堆叠的 iframeContentBg 互换层级）。 */
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border-bottom-left-radius: 30px;
+  border-bottom-right-radius: 30px;
+  /* ★ 显式 overflow:hidden 兜底——iframe 默认会裁剪内容，但部分浏览器对 iframe 内的
+     position:fixed 元素或 transform 残留可能渲染异常。配合 handleMobileResize 精确计算
+     的高度（calc(100% - 116px)），确保任何残留 transform 也不会让内容视觉外溢。 */
+  overflow: hidden;
+}
+
 .loaddingContainer {
   position: absolute;
   left: 50%;
@@ -105,6 +168,10 @@ ul li {
   padding: 0;
 }
 
+.mapClose .mapContainer .closeSpan {
+  display: none;
+}
+
 /* 地图收起时的浮动按钮 */
 .mapClose .floatBtn {
   display: block !important;
@@ -130,6 +197,89 @@ ul li {
 }
 
 /* ==================== 顶部导航栏 ==================== */
+.topbarContainer {
+  position: absolute;
+  z-index: 30;
+  top: 12px;
+  left: 50%;
+  box-sizing: border-box;
+  width: calc(100% - 64px);
+  height: 52px;
+  transform: translateX(-50%);
+  max-width: 906px;
+  display: flex;
+  font-size: 16px;
+  line-height: 1;
+  color: #132240;
+  cursor: move;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.titleDiv {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  background: url('./img/top_bar_bg.png') no-repeat center center;
+  background-size: 100% 100%;
+  box-shadow: 0px 15px 40px 0px rgba(0, 26, 97, 0.13);
+  border-radius: 26px;
+  padding: 0 24px;
+  overflow: hidden;
+}
+
+.titleDiv .topbarTitle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  margin: 0 8px;
+  line-height: 22px;
+}
+
+.titleDiv .titleItem {
+  display: flex;
+  align-items: center;
+}
+
+.titleDiv .topbarSpan {
+  font-weight: 600;
+}
+
+.titleDiv .lastDetailName {
+  min-width: 140px;
+  max-width: 380px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.titleDiv .topbarBtn {
+  width: 80px;
+  height: 30px;
+  margin-left: 24px;
+  line-height: 30px;
+  text-align: center;
+  background: rgba(255, 253, 253, 0.5);
+  border-radius: 15px;
+  border: 1px solid #fff;
+  font-size: 14px;
+  color: rgba(19, 34, 64, 0.65);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.titleDiv .topbarBtn:hover {
+  background: rgba(255, 253, 253, 0.8);
+}
+
+.titleItem svg {
+  width: 16px;
+  height: 16px;
+  margin: 0 8px;
+  fill: currentColor;
+}
+
 /* ==================== 演示地图 ==================== */
 /* 关闭按钮 */
 .mapContainer .closeSpan {
@@ -540,10 +690,10 @@ ul li {
 
 /* ==================== 场景故事浮动提示框 ==================== */
 .stepTipContainer {
-  position: absolute;
+  position: fixed;
   z-index: 31;
   bottom: 48px;
-  left: 420px;
+  right: 10px;
   display: flex;
   align-items: flex-end;
   width: 388px;

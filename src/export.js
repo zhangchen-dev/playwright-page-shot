@@ -145,6 +145,9 @@ class Exporter {
     const recordingData = {
       sceneConfig: recorder.sceneConfig,
       sceneCode: recorder.sceneCode,
+      // ★ 持久化移动端录制标记：供"继续录制 / 重录"恢复 isMobileMode，
+      //   以及地图预览读取 isMobileMode 判断是否渲染外部移动端壳子
+      isMobileMode: !!recorder.isMobileMode,
       mainModules: recorder.mainModules,
       currentMainModuleIndex: recorder.currentMainModuleIndex,
       currentSubModuleIndex: recorder.currentSubModuleIndex,
@@ -205,6 +208,12 @@ class Exporter {
       for (const subMod of mainMod.subModules) {
         if (!subMod.steps || subMod.steps.length === 0) continue;
 
+        // ★ 按子步骤自身的移动端标记决定（录制时已按步骤写入 subModule.introduction.isMobileGuide），
+        //   仅当该子步骤未携带自身标记时，回退到场景级 recorder.isMobileMode（兼容旧录制）。
+        const subIntro = subMod.introduction || {};
+        const subHasOwnFlag = typeof subIntro.isMobileGuide === 'boolean';
+        const subIsMobile = subHasOwnFlag ? !!subIntro.isMobileGuide : !!recorder.isMobileMode;
+
         const detailResponse = {
           stepTitle: subMod.mainStepTitle || '',
           stepOrder: moduleConfig.outlineDetailResponses.length + 1,
@@ -230,8 +239,8 @@ class Exporter {
               placeSelector: '#' + (mark.elementId || ''),
               clickSelector: '#' + (mark.elementId || ''),
             };
-            // ★ 移动端录制：selector.isMobileGuide = true（供真实演示系统/地图模板读取）
-            selectorObj.isMobileGuide = !!recorder.isMobileMode;
+            // ★ 移动端录制：selector.isMobileGuide（优先本子步骤自身标记，否则场景级），供真实演示系统/地图模板读取
+            selectorObj.isMobileGuide = subIsMobile;
             // ★ 是否展示「下一步」按钮：与录制选择一致（recorder 默认 true；用户取消勾选则 false）。
             //   始终写入该字段（true/false），确保配置显式反映录制选择，便于本地预览与真实演示系统读取。
             selectorObj.showNextStep = mark.showNextStep !== false;

@@ -132,7 +132,27 @@ const AUTOUSE_BUBBLE_CSS = `.xftautouseplugin-tour-guide {
 // 预览模板版本标记：模板/注入逻辑有结构性变更时 +1，使旧缓存目录自动失效、强制重建
 // （避免用户之前生成的"缺 #globalTool 导致 init 崩溃"或"旧版加载 SDK 气泡"的旧预览被幂等缓存复用）
 // 11: 修复 stripNavScripts 正则跨 </script> 吞掉整个 body 正文，导致地图预览中间区域空白
-const MAP_PREVIEW_VERSION = '13';
+// 13: 移动端预览（外部手机壳）、场景故事展示/收起、地图收起样式；移动端跳过 FIT 缩放脚本
+// 15: 移动端判定改为「按步骤」（每步读自身 isMobileGuide，支持同场景 PC/移动混合）；
+//     手机壳尺寸改用视口高度计算（修复 webview 下 body.clientHeight≈0 导致壳子过小）；
+//     FIT 脚本始终注入并按当前步骤守卫（移动步骤跳过、PC 步骤仍等比缩放）
+// 16: 移动端判定改以「页面内容」为权威（viewport meta 启发式），覆盖录制端全局开关
+//     污染的 introduction.isMobileGuide——同一场景内可同时正确展示 PC 步骤（全屏）
+//     和移动步骤（套外部手机壳），不再被错误地全部套进手机壳
+// 17: 移动端手机壳加 overflow:hidden 裁剪（iframe 内容超出壳子不再视觉外溢），
+//     iframe 自身加底部圆角（30px）、背景图加 z-index 防止遮挡圆角外框
+// 18: 修复 v17 引入的回归——去掉 iframeContentBg 的 z-index:2 与 iframe 的 z-index:1
+//     （导致 m_bg.png 透明图覆盖在 iframe 之上，壳子变空）
+// 19: 移动端 FIT_SCRIPT 检测到移动步骤时显式清除残留 transform（PC 步骤遗留的
+//     transform:scale 会让移动端内容也被缩放，表现为「内容溢出壳子」）+ iframe 加
+//     显式 overflow:hidden 兜底
+// 20: 移动端自动适配——测量 iframe 内容自然宽高，按手机壳可视区域等比缩放，
+//     解决录制页宽高比与手机壳不适配导致内容超出壳子的问题
+// 21: 修复 v20 引入的回归（连续进入移动端步骤时底部超出）——改用 iframe 元素
+//     自身的 clientWidth/Height 作为目标算 scale（不用父容器壳子的尺寸），
+//     同时不再覆盖 iframe.style.width/height（让 handleMobileResize 设置的设计
+//     尺寸生效），只通过 transform: scale 做视觉适配
+const MAP_PREVIEW_VERSION = '21';
 
 // 导航脚本全局正则（与 recorder._sequentialRenumber 一致）：预览副本中清除原有跳转脚本
 // ⚠️ 关键约束：正则必须限定在【单个 <script> 标签内】，用 (?:(?!<\/script>)[\s\S])*? 阻止跨 </script> 匹配。
@@ -179,44 +199,67 @@ const FIT_STYLE = [
 ].join('\n');
 
 /**
- * 自动开始演示（仅注入到生成的预览 index.html，源模板不动）。
- * 背景：预览的核心目的是"看引导气泡 + 看内容"，但地图模板默认 stepState='0' 会盖一层蒙版且不加载步骤 iframe。
- * 这里在页面 load 后自动调用 DemoApp.startDemo()，移除蒙版并加载第一个步骤，使气泡一打开就可见。
- * 注意：仅影响预览临时页；用户最终"下载/导出"仍使用原始录制 html 与配置，与此无关。
+ * 步骤切换后强制重新计算 FIT 缩放（保证切换 PC/移动步骤时缩放同步生效）。
+ * 注意：FIT_SCRIPT 本身已在 iframe load / resize 时自动调用，这里仅用于 jumpStep 后立即触发。
  */
-const AUTO_START_SCRIPT = [
-  '<script id="map-preview-autostart-script">',
-  'window.addEventListener("load", function () {',
-  '  setTimeout(function () {',
-  '    try { if (window.DemoApp && window.DemoApp.startDemo) window.DemoApp.startDemo(); } catch (e) {}',
-  '  }, 400);',
-  '});',
-  '</script>',
-].join('\n');
-
 const FIT_SCRIPT = [
   '<script id="map-preview-fit-script">',
   '(function() {',
-  '  function fitDemoIframe() {',
-  '    var iframe = document.getElementById("demoIframe");',
-  '    if (!iframe) return;',
-  '    var doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);',
+      '  function fitDemoIframe() {',
+      '    var iframe = document.getElementById("demoIframe");',
+      '    if (!iframe) return;',
+      '    var doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);',
   '    if (!doc) return;',
-  '    var base = doc.documentElement.scrollWidth || (doc.body && doc.body.scrollWidth) || 1280;',
-  '    var parent = iframe.parentElement;',
-  '    var cw = parent.clientWidth, ch = parent.clientHeight;',
-  '    if (!cw || !ch) return;',
-  '    var scale = cw / base;',
-  '    if (scale > 1) scale = 1;',
-  '    iframe.style.width = base + "px";',
-  '    iframe.style.height = ch + "px";',
-  '    iframe.style.transform = "scale(" + scale + ")";',
+      '    var isMobile = false;',
+      '    try { isMobile = !!(window.DemoApp && typeof window.DemoApp.isMobileScene === "function" && window.DemoApp.isMobileScene()); } catch (e) {}',
+      '    if (isMobile) {',
+      '      // ★ v21 移动端适配（关键修复）：用 iframe 元素本身的 clientWidth/Height 作为目标，',
+      '      //   不是用父容器 .iframeContent 的尺寸。',
+      '      //   v20 的 bug：用 parent 尺寸（壳子 422×852）算 scale，但 iframe 设计尺寸是 375×736，',
+      '      //   内容宽高比偏向纵向时视觉高度超过 iframe 设计高度，连续进入移动端步骤时易底部超出。',
+      '      //   现在改为用 iframe 自身的 clientWidth/Height 算 scale，确保内容完整装入 iframe bounds。',
+      '      //',
+      '      //   ★ 同时不在 mobile 模式下覆盖 iframe.style.width/height/top/left（让 handleMobileResize 设置生效），',
+      '      //   只通过 transform: scale 做视觉缩放（transform 不影响 layout，iframe 元素始终是 handleMobileResize 设的尺寸）。',
+      '      var iframeW = iframe.clientWidth;',
+      '      var iframeH = iframe.clientHeight;',
+      '      if (!iframeW || !iframeH) return;  // iframe 还没尺寸（handleMobileResize 还没跑），跳过',
+      '      var contentW = doc.documentElement.scrollWidth || (doc.body && doc.body.scrollWidth) || 0;',
+      '      var contentH = doc.documentElement.scrollHeight || (doc.body && doc.body.scrollHeight) || 0;',
+      '      if (!contentW || !contentH) return;  // 内容还没尺寸（DOM 还没渲染完），跳过',
+      '      var scaleW = iframeW / contentW;',
+      '      var scaleH = iframeH / contentH;',
+      '      var fitScale = Math.min(scaleW, scaleH);',
+      '      if (fitScale > 1) fitScale = 1;',
+      '      // ★ 不修改 iframe 元素的 width/height（保持 handleMobileResize 设置的设计尺寸）',
+      '      //   只通过 transform 让内容视觉缩放填满 iframe。',
+      '      iframe.style.transformOrigin = "top left";',
+      '      if (fitScale < 1) {',
+      '        iframe.style.transform = "scale(" + fitScale + ")";',
+      '      } else {',
+      '        // 内容自然尺寸已在 iframe 内，清除 transform（恢复 1:1 显示）',
+      '        if (iframe.style.transform) iframe.style.transform = "";',
+      '      }',
+      '      return;',
+      '    }',
+      '    // PC 步骤：原 FIT 缩放逻辑',
+      '    var parent = iframe.parentElement;',
+      '    var cw = parent.clientWidth, ch = parent.clientHeight;',
+      '    if (!cw || !ch) return;',
+      '    var base = doc.documentElement.scrollWidth || (doc.body && doc.body.scrollWidth) || 1280;',
+      '    var scale = cw / base;',
+      '    if (scale > 1) scale = 1;',
+      '    iframe.style.width = base + "px";',
+      '    iframe.style.height = ch + "px";',
+      '    iframe.style.transform = "scale(" + scale + ")";',
   '  }',
   '  window.addEventListener("resize", fitDemoIframe);',
   '  var _ifr = document.getElementById("demoIframe");',
   '  if (_ifr) { _ifr.addEventListener("load", function () { setTimeout(fitDemoIframe, 60); }); }',
   '  window.addEventListener("load", function () { setTimeout(fitDemoIframe, 300); });',
   '  setTimeout(fitDemoIframe, 500);',
+  '  // ★ v21：监听步骤切换事件（app.js updateIframeUrl 派发），立即重新计算',
+  '  window.addEventListener("map-step-changed", function () { setTimeout(fitDemoIframe, 30); });',
   '})();',
   '</script>',
 ].join('\n');
@@ -236,6 +279,89 @@ function flattenSteps(mainModules) {
 }
 
 /**
+ * 探测场景是否为「移动端录制」。
+ * 判定优先级：
+ *   1) recording_data.json 直接携带的 isMobileMode（新录制/继续录制/重录均会持久化）；
+ *   2) 任意子步骤 introduction.isMobileGuide 为 true（向前兼容分步标记）；
+ *   3) 兜底：从导出目录 demo_config.json 的 selector.isMobileGuide 探测
+ *      （旧场景在启用移动端录制时，导出配置里已写入该字段，可据此还原）。
+ * @param {object} recData  录制的 recording_data.json 解析结果
+ * @param {string} dirPath  场景目录（含 demo_config.json 的导出目录）
+ * @returns {boolean}
+ */
+function detectMobileMode(recData, dirPath) {
+  if (recData && recData.isMobileMode) return true;
+  for (const m of (recData.mainModules || [])) {
+    for (const sub of (m.subModules || [])) {
+      if (sub.introduction && sub.introduction.isMobileGuide) return true;
+    }
+  }
+  // 兜底：旧场景从 demo_config.json 探测
+  try {
+    const cfgPath = path.join(dirPath, 'demo_config.json');
+    if (fs.existsSync(cfgPath)) {
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+      const arr = Array.isArray(cfg) ? cfg : [cfg];
+      for (const top of arr) {
+        for (const mod of (top.stepModuleConfigs || [])) {
+          for (const det of (mod.outlineDetailResponses || [])) {
+            for (const gc of (det.guideComponentList || [])) {
+              if (gc.selector) {
+                try {
+                  const sel = JSON.parse(gc.selector);
+                  if (sel.isMobileGuide) return true;
+                } catch (e) {}
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {}
+  return false;
+}
+
+/**
+ * ★ 从步骤 HTML 内容反推本步骤是否为「移动端页面」。
+ * 用 viewport meta 的差异区分（移动页通常带 user-scalable=no / maximum-scale=1 锁定缩放；
+ * 桌面页通常只有 width=device-width, initial-scale=1）。
+ * 录制端会将全局 isMobileMode 开关统一写到每步 introduction.isMobileGuide，
+ * 但同一场景里用户可能既录了 PC 页又录了移动页，导致全局标记污染每步——这种情况下必须以
+ * 实际页面内容为准，否则会被错误地套上手机壳。
+ *
+ * @param {string} html  步骤 htmlContent（录制时保存的完整 HTML 副本）
+ * @returns {boolean|null}  true=确认为移动端，false=确认为 PC，null=无法判定（按既有逻辑兜底）
+ */
+function detectMobileFromContent(html) {
+  if (!html || typeof html !== 'string') return null;
+  const m = html.match(/<meta[^>]*\bname\s*=\s*["']viewport["'][^>]*\bcontent\s*=\s*["']([^"']*)["'][^>]*>/i);
+  if (!m) {
+    // ★ 无 viewport meta：按 PC 处理。纯桌面/SSR 站点通常没有此 meta，而绝大多数移动 SPA/H5
+    //   必带 viewport meta（哪怕只有 width=device-width）。这是「无 meta → 非移动」的安全默认。
+    //   注：recorder 自身不会注入 viewport meta（已 grep 确认），所以 meta 全部来自被录制页面本身。
+    return false;
+  }
+  const content = String(m[1] || '').toLowerCase();
+  // ★ 强移动端特征：禁用缩放（user-scalable=no + maximum-scale=1）—— 桌面站点从不主动锁定缩放，
+  //   几乎所有现代移动端 H5/响应式站点都会加上这条防止误触缩放，故认为是确凿的移动端信号。
+  const hasUserScalableNo = /user-scalable\s*=\s*no/.test(content);
+  const hasMaxScale1 = /maximum-scale\s*=\s*1\b/.test(content);
+  if (hasUserScalableNo && hasMaxScale1) return true;
+  // ★ 强 PC 特征：仅 "width=device-width, initial-scale=1"（无缩放锁定）。
+  //   这是 cmbchina.com 等纯桌面站点最常见的 viewport 形态；移动端绝少用这种"宽松"配置。
+  const isRelaxed = /^width\s*=\s*device-width\s*,\s*initial-scale\s*=\s*1(?:\.0+)?\s*$/.test(content.trim());
+  if (isRelaxed) return false;
+  // ★ viewport-fit=cover 是移动端刘海屏适配特征，几乎只出现在移动端 H5/响应式页面
+  if (/viewport-fit\s*=\s*cover/.test(content)) return true;
+  // ★ 仅有 initial-scale=1 但还带其他内容的（如 minimum-scale=1 + initial-scale=1），
+  //   倾向于移动端（移动端常同时锁定 min/max），否则 PC
+  if (/initial-scale\s*=\s*1/.test(content) && /minimum-scale\s*=\s*1/.test(content) && /maximum-scale/.test(content)) {
+    return true;
+  }
+  return null;
+}
+
+/**
  * 将录制配置（recording_data.json 形状）转换为地图页所需的 MockData（raw 格式）。
  * 注意：地图页 app.js 会再用 transformData() 处理一次，所以这里输出的是它期望的"原料"格式：
  *   { demonstrationCode, demonstrationTitle, demonstrationSubTitle, demonstrationHeaderNavTitle,
@@ -246,7 +372,7 @@ function flattenSteps(mainModules) {
  *   subModules+steps 扁平 -> stepList（每个录制步骤 = 地图一个子步骤节点 = 一个 stepN.html）
  *   步骤 marks[0]   -> 该节点的标题/引导文案/位置
  */
-function transformRecordingToMockConfig(recData) {
+function transformRecordingToMockConfig(recData, isMobileMode) {
   const sceneConfig = recData.sceneConfig || {};
   const sceneCode = recData.sceneCode || 'scene';
   const mainModules = recData.mainModules || [];
@@ -254,7 +380,19 @@ function transformRecordingToMockConfig(recData) {
   const moduleList = mainModules.map((m) => {
     // ★ 每个 subModule = 地图一个主步骤（右侧导航项；点击跳转该主步骤的子步骤 0）
     const stepList = (m.subModules || []).map((subMod) => {
+      // ★ 移动端标记判定（优先级从高到低）：
+      //   1) 【按页面内容反推】（viewport meta 决定）—— 录制端会把全局 isMobileMode 写到每步
+      //      introduction.isMobileGuide，导致同一场景里既录 PC 页又录移动页时被全部打上
+      //      isMobileGuide=true（用户报错"我 PC 页面也被套进移动端"）。以内容为准可正确分类。
+      //   2) 子步骤自身的 introduction.isMobileGuide（仅当内容反推无法判定时使用，避免覆盖用户显式标记的旧场景）
+      //   3) 场景级 isMobileMode（最后兜底）
+      const subIntro = subMod.introduction || {};
+      const subHasOwnFlag = typeof subIntro.isMobileGuide === 'boolean';
+      const subFallbackMobile = subHasOwnFlag ? !!subIntro.isMobileGuide : !!isMobileMode;
+
       // ★ 每个 captured page（step）= 该主步骤下的一个子步骤（页面跳转），仅在气泡中体现，不在地图展开
+      //   ★ 移动端标记必须在 subStep 级别独立计算——同一 subModule 内可能既有 PC 页又有移动页，
+      //     仅看第一步 HTML 会漏掉混合场景。这里每步独立反推，失败时回退到 subModule/场景级标记。
       const subStepList = (subMod.steps || []).map((snapshot) => {
         const marks = Array.isArray(snapshot.marks) ? snapshot.marks : [];
         const firstMark = marks[0] || {};
@@ -263,17 +401,31 @@ function transformRecordingToMockConfig(recData) {
         const position = firstMark.position || 'right';
         // ★ 是否展示「下一步」按钮：与录制选择一致（默认 true；用户取消勾选为 false）
         const showNextStep = firstMark.showNextStep !== false;
+        // ★ 该子步骤的移动端标记：以本子步骤自身 HTML 为权威，失败回退 subModule/场景级
+        const contentMobile = detectMobileFromContent(snapshot.htmlContent || '');
+        const subStepIsMobile = contentMobile !== null ? contentMobile : subFallbackMobile;
         return {
           title: stepTitle,
           content: question,
           position: position,
           showNextStep: showNextStep,
+          // ★ 子步骤级 selector：app.js 的 transformData() 会把这里已有的 selector.isMobileGuide
+          //   直接使用，避免把同一 subModule 内的 PC 步骤和移动步骤统一套上同一种壳子
+          selector: {
+            placeSelector: '#' + (firstMark.elementId || ''),
+            clickSelector: '#' + (firstMark.elementId || ''),
+            isMobileGuide: subStepIsMobile,
+          },
         };
+      });
+      // ★ 移动端标记：subModule 级别（用于地图卡片/UI 上展示），取 subStep 列表中真值优先
+      const introduction = Object.assign({}, subIntro, {
+        isMobileGuide: subFallbackMobile,
       });
       return {
         stepTitle: subMod.mainStepTitle || '演示主步骤',
         stepName: subMod.mainStepTitle || '演示主步骤',
-        introduction: subMod.introduction || {},
+        introduction: introduction,
         // 子步骤（页面跳转），仅体现在气泡，不展开为地图层
         subStepList: subStepList,
       };
@@ -556,9 +708,13 @@ async function generateMapPreview({ dirPath, outputDir } = {}) {
       return { success: false, error: '该场景没有录制步骤' };
     }
 
-    // 1) 转换配置
-    const mockConfig = transformRecordingToMockConfig(recData);
+    // 1) 转换配置（含移动端标记探测，供手机壳渲染 + FIT 脚本跳过）
+    const isMobileMode = detectMobileMode(recData, dirPath);
+    const mockConfig = transformRecordingToMockConfig(recData, isMobileMode);
     const code = recData.sceneCode || path.basename(dirPath);
+    // ★ 缓存版本标记（仅版本号，不再区分 -m/-p）：移动端判定已改为「按步骤」，
+    //   同一场景可能同时含 PC 步骤与移动步骤，FIT 脚本始终注入并按当前步骤守卫跳过移动步骤。
+    const versionMarker = 'map-preview-v' + MAP_PREVIEW_VERSION;
 
     // 2) 准备临时目录（基于场景目录名固定，避免每次点击都重新生成导致卡顿）
     const dirKey = sanitizeName(path.basename(dirPath));
@@ -576,7 +732,7 @@ async function generateMapPreview({ dirPath, outputDir } = {}) {
       let stale = true;
       try {
         const prev = fs.readFileSync(existingIndex, 'utf-8');
-        stale = prev.indexOf('map-preview-version:' + MAP_PREVIEW_VERSION) === -1;
+        stale = prev.indexOf(versionMarker) === -1;
       } catch (e) {}
       if (!stale) {
         const url = 'file://' + existingIndex.replace(/\\/g, '/');
@@ -614,10 +770,14 @@ async function generateMapPreview({ dirPath, outputDir } = {}) {
     const newIdxHtml = idxHtml.replace(loaderRegex, newLoader);
     // 注入「等比缩放（fit）」逻辑：让嵌入的录制页面随窗口/容器大小整体缩放（仅预览副本，源模板不动）
     // 同时注入「自动开始演示」脚本，使气泡引导一打开地图预览就可见（仅预览页，导出逻辑零改动）
+    // 移动端判定已改为「按步骤」：同一场景可能同时含 PC 步骤与移动步骤。故【始终注入 FIT 脚本】，
+    // 由 FIT_SCRIPT 内的 isMobileScene 守卫按当前步骤自动判断——仅对 PC 步骤等比缩放，对移动步骤跳过
+    // （移动步骤的 iframe 尺寸由 handleMobileResize 自行定义），保证混合场景下 PC 步骤仍能随容器缩放。
+    const fitInjection = FIT_STYLE + '\n' + FIT_SCRIPT + '\n';
     const finalIdxHtml = newIdxHtml.replace(
       '</body>',
-      '<!-- map-preview-version:' + MAP_PREVIEW_VERSION + ' -->\n' +
-        FIT_STYLE + '\n' + FIT_SCRIPT + '\n' + AUTO_START_SCRIPT + '\n</body>'
+      '<!-- ' + versionMarker + ' -->\n' +
+        fitInjection + '\n</body>'
     );
     fs.writeFileSync(path.join(mapDir, 'index.html'), finalIdxHtml, 'utf-8');
 
@@ -672,4 +832,5 @@ module.exports = {
   buildAutouseBootstrapScript,
   stripNavScripts,
   stripExternalAutouse,
+  detectMobileFromContent,
 };

@@ -85,11 +85,28 @@
     }
 
     if (e.type === 'click') {
-      overlay.style.display = 'none';
-      tooltip.style.display = 'none';
+      // ★ 覆盖式单元素标记：先清掉页面上已存在的同名 id（含跨 iframe 残留），避免重复 id
+      try {
+        document.querySelectorAll('[id="' + generateElementId() + '"]').forEach(function(existing){
+          if (existing !== e.target) existing.removeAttribute('id');
+        });
+      } catch (e2) {}
 
       var elementId = generateElementId();
       e.target.id = elementId;
+
+      // ★ 选中后保留高亮框在页面上（让用户看到选了哪个元素）；
+      //   该 overlay 在捕获 HTML 时会被排除（captureWebviewData cleanupCode 移除），不会写入最终保存的 HTML
+      var rect = e.target.getBoundingClientRect();
+      overlay.style.top = rect.top + 'px';
+      overlay.style.left = rect.left + 'px';
+      overlay.style.width = rect.width + 'px';
+      overlay.style.height = rect.height + 'px';
+      overlay.style.display = 'block';
+      tooltip.style.display = 'none';
+      document.body.style.cursor = '';
+      isSelecting = false;
+      _iframeState.forEach(function(s){ if(s.overlay) s.overlay.style.display='none'; if(s.tooltip) s.tooltip.style.display='none'; });
 
       try {
         if (typeof window.__recOnElementSelected === 'function') {
@@ -104,8 +121,6 @@
         }
       } catch (err) {
         console.error('[recHelper] __recOnElementSelected 回调异常:', err);
-      } finally {
-        disableSelectionMode();
       }
     }
   }
@@ -201,12 +216,24 @@
         }
 
         if (e.type === 'click') {
-          iOverlay.style.display = 'none';
-          iTooltip.style.display = 'none';
-
-          // 在 iframe document 中生成唯一元素 ID（从全局序号开始）
           var elementId = generateElementId();
+          // ★ 覆盖式：清掉 iframe 内已存在的同名 id（保留当前元素）
+          try {
+            var idoc = iframe.contentDocument;
+            if (idoc) idoc.querySelectorAll('[id="' + elementId + '"]').forEach(function(ex){
+              if (ex !== e.target) ex.removeAttribute('id');
+            });
+          } catch (e2) {}
           e.target.id = elementId;
+
+          // ★ 保留 iframe 内高亮框在选中元素上（让用户看到选了哪个元素；捕获时会被排除）
+          var iRect = e.target.getBoundingClientRect();
+          iOverlay.style.top = iRect.top + 'px';
+          iOverlay.style.left = iRect.left + 'px';
+          iOverlay.style.width = iRect.width + 'px';
+          iOverlay.style.height = iRect.height + 'px';
+          iOverlay.style.display = 'block';
+          iTooltip.style.display = 'none';
 
           // ★ 通过父窗口的回调通知 host
           //    window.parent.__recOnElementSelected 在顶层 window 定义，
@@ -228,10 +255,10 @@
             console.error('[recHelper iframe] 回调异常:', err);
           }
 
-          // ★ 禁用选择模式（通过顶层 __recHelper）
+          // ★ 禁用顶层选择模式（isSelecting=false）；保留 iframe 内高亮框（keepHighlight=true），让用户看到选了哪个元素
           try {
             if (window.parent && window.parent.__recHelper) {
-              window.parent.__recHelper.disableSelectionMode();
+              window.parent.__recHelper.disableSelectionMode(true);
             }
           } catch (err) {}
         }
@@ -294,21 +321,30 @@
     enableSelectionMode: function() {
       isSelecting = true;
       document.body.style.cursor = 'crosshair';
+      // ★ 进入选择模式时先清掉上一轮残留的高亮框，避免视觉错位
+      overlay.style.display = 'none';
+      tooltip.style.display = 'none';
+      _iframeState.forEach(function(s){ if(s.overlay) s.overlay.style.display='none'; if(s.tooltip) s.tooltip.style.display='none'; });
       // ★ 绑定所有同域 iframe
       _bindAllIframes();
     },
 
-    /** 禁用选择模式 */
-    disableSelectionMode: function() {
+    /** 禁用选择模式
+     *  @param {boolean} [keepHighlight] 选中成功后传 true，保留选中元素的高亮框
+     *        （让用户看到选了哪个元素；该 overlay 在捕获 HTML 时会被排除，不进保存产物）。
+     *        Esc 取消 / 显式清空时传 false 或省略，隐藏高亮框。 */
+    disableSelectionMode: function(keepHighlight) {
       isSelecting = false;
-      overlay.style.display = 'none';
       tooltip.style.display = 'none';
       document.body.style.cursor = '';
-      // 清理 iframe overlay
-      _iframeState.forEach(function(s) {
-        if (s.overlay) s.overlay.style.display = 'none';
-        if (s.tooltip) s.tooltip.style.display = 'none';
-      });
+      // ★ 仅当未要求保留高亮时才隐藏顶层 overlay
+      if (!keepHighlight) {
+        overlay.style.display = 'none';
+      }
+      // ★ 同样按需隐藏 iframe 内高亮框（保留高亮时连 iframe 内框一起保留）
+      if (!keepHighlight) {
+        _iframeState.forEach(function(s){ if(s.overlay) s.overlay.style.display='none'; });
+      }
     },
 
     /** 移除元素 ID（顶层 + 所有同域 iframe） */

@@ -143,6 +143,8 @@ class Recorder {
       case 'continueRecording': return this._continueRecording(msg);
       case 'startReRecord': return this._startReRecord(msg);   // ★ 重录该步骤
       case 'cancelReRecord': return this._cancelReRecord(msg); // ★ 取消重录
+      case 'setCurrentMainModule': return this._setCurrentMainModule(msg); // ★ 树交互：切换当前模块
+      case 'setCurrentSubModule': return this._setCurrentSubModule(msg); // ★ 树交互：切换当前主步骤
       default: return null;
     }
   }
@@ -195,8 +197,8 @@ class Recorder {
     if (!this.pageMarks.has(activePageId)) {
       this.pageMarks.set(activePageId, []);
     }
-    const marks = this.pageMarks.get(activePageId);
-    marks.push({
+    // ★ 单元素标记：每次标记直接覆盖上一次（仅保留最新一个），避免同一页面堆积多个标记
+    this.pageMarks.set(activePageId, [{
       mainTitle,
       subTitle: subTitle || '',
       stepId: this.currentStepId,
@@ -205,8 +207,8 @@ class Recorder {
       elementId: elementId || '',
       showNextStep: showNextStep !== false, // 默认 true
       position: position || 'right',
-    });
-    console.log(`[Recorder] 标记完成: ${mainTitle} (elementId=${elementId})`);
+    }]);
+    console.log(`[Recorder] 标记完成(覆盖式): ${mainTitle} (elementId=${elementId})`);
     this._notifyStateChange();
     return { stateChanged: true };
   }
@@ -229,7 +231,7 @@ class Recorder {
   }
 
   async _nextStep(msg) {
-    const { pageId } = msg;
+    const { pageId, isMobile } = msg;
     const activePageId = pageId || this._getActivePageId();
     this._saveCurrentModuleMeta(msg);
     if (!this.browserManager) {
@@ -253,6 +255,9 @@ class Recorder {
         marks,
         isEndRecording: false,
       });
+      // ★ per-step 移动端标记：只记用户在该步骤录制时的开关状态，支持混合录制（部分 mobile / 部分 PC）。
+      //   下一步若未开 isMobile，则该步 snapshot.isMobileGuide = false，与本步互不影响。
+      if (typeof isMobile === 'boolean') snapshot.isMobileGuide = !!isMobile;
 
       const subMod = this._getCurrentSubModule();
       if (subMod) {
@@ -277,7 +282,7 @@ class Recorder {
    * 使用渲染进程预捕获的 HTML/CSS 数据，不需要 Playwright page 对象
    */
   async _nextStepWebview(msg) {
-    const { url, html, cssContents, iframes, baseURI, isEndRecording: forceEnd } = msg;
+    const { url, html, cssContents, iframes, baseURI, isEndRecording: forceEnd, isMobile } = msg;
     const activePageId = 'webview';
     this._saveCurrentModuleMeta(msg);
     const marks = this.pageMarks.get(activePageId) || [];
@@ -312,6 +317,9 @@ class Recorder {
         marks,
         isEndRecording: !!forceEnd,
       });
+      // ★ per-step 移动端标记：只记用户在该步骤录制时的开关状态，支持混合录制（部分 mobile / 部分 PC）。
+      //   _endAndSave 调用本方法时，msg.isMobile 反映「结束保存」那一刻的开关状态——即末步的开关选择。
+      if (typeof isMobile === 'boolean') snapshot.isMobileGuide = !!isMobile;
 
       const subMod = this._getCurrentSubModule();
       if (subMod) {
@@ -418,6 +426,30 @@ class Recorder {
     console.log(`[Recorder] 新增模块: index=${this.currentMainModuleIndex}`);
     this._notifyStateChange();
     return { stateChanged: true, response: { type: 'formCleared' } };
+  }
+
+  // ===== ★ 树交互：切换当前模块（仅改变"当前"定位，不影响已录制数据） =====
+  _setCurrentMainModule(msg) {
+    const idx = msg && typeof msg.index === 'number' ? msg.index : -1;
+    if (idx < 0 || idx >= this.mainModules.length) return { stateChanged: false };
+    this.currentMainModuleIndex = idx;
+    this.currentSubModuleIndex = 0;
+    this.currentStepId = this._generateStepId();
+    this.nextStepId = this._generateStepId();
+    this._notifyStateChange();
+    return { stateChanged: true };
+  }
+
+  // ===== ★ 树交互：切换当前主步骤 =====
+  _setCurrentSubModule(msg) {
+    const idx = msg && typeof msg.index === 'number' ? msg.index : -1;
+    const mainMod = this._getCurrentMainModule();
+    if (!mainMod || idx < 0 || idx >= mainMod.subModules.length) return { stateChanged: false };
+    this.currentSubModuleIndex = idx;
+    this.currentStepId = this._generateStepId();
+    this.nextStepId = this._generateStepId();
+    this._notifyStateChange();
+    return { stateChanged: true };
   }
 
   async _endAndSave(msg) {

@@ -8,7 +8,7 @@ import { api } from '../../common/api.js';
 import { updateStatus } from '../../common/feedback.js';
 import { updateLayout, updateAlwaysOnTop } from '../../common/layout.js';
 import { updateScenarioCardHighlight } from '../../preview/preview.js';
-import { updateMarkUI } from '../shared/recording-actions.js';
+import { updateMarkUI, doCompleteMark } from '../shared/recording-actions.js';
 import { showSavePasswordDialog } from '../shared/credentials-ui.js';
 import { hideBanner } from '../../common/banner.js';
 import { rerenderPanel } from '../../app.js';
@@ -174,13 +174,24 @@ export function setupWebviewIpcListener(targetWebview) {
       appState.hasSelectedElement = true;
       appState.selectedElementData = data;
       appState.isSelectingMode = false;
-      // ★ 禁用发出事件的那个 webview 的选择模式（多 tab 下要精确到来源 webview）
-      disableWebviewSelectionMode(webview);
-      // ★ 自动填充主标题（如果为空）
+      // ★ 记录待提交标记（覆盖式单元素），作为「下一步/结束保存」捕获前的兜底重提交源，
+      //   防止「选择→点下一步」过快时自动标记的异步链路尚未落库导致本步指引丢失。
+      appState._pendingMark = {
+        elementId: data.elementId,
+        isInIframe: data.isInIframe,
+        iframeSrc: data.iframeSrc,
+        text: data.text,
+      };
+      // ★ 禁用发出事件的那个 webview 的选择模式（多 tab 下要精确到来源 webview）；
+      //   keepHighlight=true：保留选中元素的高亮框，让用户看到选了哪个元素
+      disableWebviewSelectionMode(webview, true);
+      // ★ 自动填充主标题（如果为空），随后直接自动标记，无需再点"标记"按钮
       const mtInput = document.getElementById('markMainTitleInput');
       if (mtInput && !mtInput.value && data.text) mtInput.value = data.text;
       updateMarkUI();
-      updateStatus('已选择元素（' + (data.tagName || '') + '），请填写信息后标记', 'var(--accent-green)');
+      updateStatus('已选择元素（' + (data.tagName || '') + '），已自动标记', 'var(--accent-green)');
+      // ★ 选择即标记：覆盖式单元素标记在后端执行，详见 recorder._completeMark
+      doCompleteMark();
     } else if (channel === 'selection-cancelled') {
       appState.hasSelectedElement = false;
       appState.selectedElementData = null;
@@ -237,12 +248,13 @@ export async function enableWebviewSelectionMode() {
   }
 }
 
-/** 在 webview 中禁用元素选择模式 */
-export async function disableWebviewSelectionMode(targetWebview) {
+/** 在 webview 中禁用元素选择模式
+ *  @param {boolean} [keepHighlight] 透传给注入脚本：true 保留选中元素高亮框，false 隐藏 */
+export async function disableWebviewSelectionMode(targetWebview, keepHighlight) {
   const webview = targetWebview || recWebview();
   if (!webview) return;
   try {
-    await webview.executeJavaScript('window.__recHelper && window.__recHelper.disableSelectionMode()');
+    await webview.executeJavaScript('window.__recHelper && window.__recHelper.disableSelectionMode(' + (keepHighlight ? 'true' : 'false') + ')');
   } catch (e) {
     // ignore
   }

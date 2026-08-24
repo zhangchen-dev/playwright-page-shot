@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>playwright-page-shot · 架构图</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --panel:#ffffff; --ink:#1f2733; --sub:#5b6675;
+    --line:#d8dee8; --accent:#2f6bff; --accent2:#00a98f; --accent3:#f59e0b;
+    --main:#eef3ff; --preload:#fef3e2; --render:#e9faf4; --core:#f3eefe;
+    --mono:#8a3ffc; --warn:#e23b3b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.6;font-size:14px}
+  header{background:linear-gradient(120deg,#2f6bff,#00a98f);color:#fff;padding:28px 40px}
+  header h1{margin:0 0 6px;font-size:24px;letter-spacing:.5px}
+  header p{margin:0;opacity:.92;font-size:14px}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 24px 60px}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:22px 26px;margin:22px 0;box-shadow:0 1px 3px rgba(20,30,50,.04)}
+  h2{font-size:18px;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+  h2 .tag{font-size:11px;font-weight:600;color:#fff;background:var(--accent);
+    padding:2px 9px;border-radius:20px}
+  .lead{color:var(--sub);margin:2px 0 18px;font-size:13px}
+  /* layered diagram */
+  .layer{display:flex;gap:14px;margin:12px 0;align-items:stretch}
+  .layer .lbl{width:118px;flex:none;display:flex;align-items:center;justify-content:center;
+    font-weight:700;color:#fff;border-radius:10px;writing-mode:horizontal-tb;font-size:13px;text-align:center}
+  .lbl.main{background:#2f6bff}.lbl.pre{background:#f59e0b}.lbl.ren{background:#00a98f}
+  .layer .box{flex:1;background:#fcfdff;border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 10px;
+    font-size:12.5px;box-shadow:0 1px 2px rgba(20,30,50,.03)}
+  .chip b{color:var(--accent)}
+  .chip small{display:block;color:var(--sub);font-size:11px;margin-top:2px}
+  .arrow{text-align:center;color:var(--sub);font-size:12px;margin:2px 0}
+  /* grid cards */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+  .card{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:#fcfdff}
+  .card h3{margin:0 0 6px;font-size:14px;color:var(--accent)}
+  .card .path{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--mono);
+    background:#f6f2ff;padding:2px 6px;border-radius:5px;display:inline-block;margin-bottom:8px}
+  .card ul{margin:6px 0 0;padding-left:18px;color:var(--sub);font-size:12.5px}
+  .card ul li{margin:3px 0}
+  /* table */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}
+  th{background:#f2f5fb;color:var(--ink);font-weight:600}
+  td code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--mono);
+    background:#f6f2ff;padding:1px 5px;border-radius:4px}
+  /* flow */
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:0}
+  .step{background:#fff;border:1px solid var(--line);border-radius:9px;padding:10px 12px;
+    font-size:12px;min-width:120px;max-width:170px}
+  .step b{display:block;color:var(--accent);font-size:12px;margin-bottom:2px}
+  .step small{color:var(--sub)}
+  .conn{color:var(--accent);font-size:18px;padding:0 8px;flex:none}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 0;font-size:12px;color:var(--sub)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:11px;height:11px;border-radius:3px;display:inline-block}
+  /* tree */
+  .tree{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.9;
+    background:#0f172a;color:#cbd5e1;padding:18px 20px;border-radius:10px;overflow:auto}
+  .tree .k{color:#7dd3fc}.tree .m{color:#fca5a5}.tree .v{color:#86efac}
+  .note{background:#fff8ec;border-left:4px solid var(--accent3);padding:10px 14px;border-radius:0 8px 8px 0;
+    font-size:12.5px;color:#7a5b16;margin-top:14px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:780px){.two{grid-template-columns:1fr}.layer{flex-direction:column}.lbl{width:auto}}
+  .foot{text-align:center;color:var(--sub);font-size:12px;margin-top:24px}
+</style>
+</head>
+<body>
+<header>
+  <h1>playwright-page-shot · 系统架构图</h1>
+  <p>基于 Electron + 应用内 webview 的网页录制桌面工具 —— 捕获页面快照、标记元素、多步骤导出与地图预览</p>
+</header>
+
+<div class="wrap">
+
+<!-- 1. 分层总览 -->
+<section>
+  <h2><span class="tag">01</span>整体分层架构</h2>
+  <p class="lead">经典 Electron 三层：主进程（业务内核）↔ Preload（安全桥）↔ 渲染进程（UI）。录制内核 <code>src/</code> 运行在主进程，渲染层以 ES Module 直载、无打包步骤。</p>
+
+  <div class="layer">
+    <div class="lbl main">主进程<br>Main</div>
+    <div class="box">
+      <div class="chips">
+        <div class="chip"><b>main.js</b><small>入口：BrowserWindow / Tray / 生命周期 / IPC 注册</small></div>
+        <div class="chip"><b>src/recorder.js</b><small>录制状态机（单一数据源：phase / 模块树 / 场景码）</small></div>
+        <div class="chip"><b>src/html-capture.js</b><small>HTML 捕获引擎：DOM 清理 + CSS/资源内联</small></div>
+        <div class="chip"><b>src/export.js</b><small>导出静态 HTML/CSS + demo_config.json</small></div>
+        <div class="chip"><b>src/map-preview.js</b><small>地图预览生成（复制模板到临时目录）</small></div>
+        <div class="chip"><b>src/credential-store.js</b><small>safeStorage 加密凭证</small></div>
+        <div class="chip"><b>src/inject/*</b><small>webview 注入脚本：元素拾取 / 凭证填充 / preload</small></div>
+      </div>
+    </div>
+  </div>
+  <div class="arrow">↑　contextBridge · ipcRenderer ⇄ ipcMain　↓</div>
+  <div class="layer">
+    <div class="lbl pre">预加载<br>Preload</div>
+    <div class="box">
+      <div class="chips">
+        <div class="chip"><b>main/preload.js</b><small>暴露 <code>window.electronAPI</code>：sendAction / 事件监听 / 凭证 / 预览</small></div>
+      </div>
+    </div>
+  </div>
+  <div class="arrow">↑　DOM 事件 · 模块调用　↓</div>
+  <div class="layer">
+    <div class="lbl ren">渲染进程<br>Renderer</div>
+    <div class="box">
+      <div class="chips">
+        <div class="chip"><b>panel.html</b><small>三栏骨架（左菜单 / 中 URL+内容 / 右预览）</small></div>
+        <div class="chip"><b>modules/app.js</b><small>入口：事件总线 + rerenderPanel</small></div>
+        <div class="chip"><b>modules/common/*</b><small>api / state / dom / layout / tabs / webview-controls / banner</small></div>
+        <div class="chip"><b>modules/recording/*</b><small>recording-ui / actions / navigation / webview-recording / rerecord</small></div>
+        <div class="chip"><b>modules/preview/*</b><small>preview / map-preview / step-selector</small></div>
+        <div class="chip"><b>modules/management · demo · settings</b><small>场景管理 / 定制演示 / 设置视图</small></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2. 模块全景 -->
+<section>
+  <h2><span class="tag">02</span>模块全景与职责</h2>
+  <p class="lead">按"内核 / 通信 / UI / 资源"四类梳理关键文件及其责任边界。</p>
+  <div class="grid">
+    <div class="card"><div class="path">main/main.js</div><h3>应用入口</h3>
+      <ul><li>创建 1366×768 面板窗口（居中、可最大化）</li><li>系统托盘 + 关闭最小化到托盘</li><li>webview <code>setWindowOpenHandler</code> 拦截 _blank → 多 tab</li><li>实例化 Recorder / CredentialStore，注册 IPC</li></ul></div>
+    <div class="card"><div class="path">src/recorder.js</div><h3>录制状态机</h3>
+      <ul><li>phase：config → recording</li><li>维护 mainModules→subModules→steps 模块树</li><li>场景码 / 环境 / 移动端 / 重录模式状态</li><li>handleAction 统一动作分发</li></ul></div>
+    <div class="card"><div class="path">src/html-capture.js</div><h3>HTML 捕获引擎</h3>
+      <ul><li>page.evaluate 克隆 DOM 并清理录制面板/脚本/事件</li><li>cheerio 处理 CSS URL 与去重</li><li>注入 autouse 气泡 SDK</li></ul></div>
+    <div class="card"><div class="path">src/export.js</div><h3>导出器</h3>
+      <ul><li>输出静态 HTML/CSS + demo_config.json</li><li>recording_data.json 隔离至 recording-meta</li><li>兼容旧版路径回退</li></ul></div>
+    <div class="card"><div class="path">src/map-preview.js</div><h3>地图预览</h3>
+      <ul><li>复制 map-template 到 os.tmpdir（只读源）</li><li>transformData：按内容反推移动端 + subStep 级判定</li><li>FIT_SCRIPT 守卫式等比缩放</li></ul></div>
+    <div class="card"><div class="path">src/inject/*</div><h3>webview 注入</h3>
+      <ul><li>element-helper：元素拾取高亮</li><li>credential-helper：凭证自动填充</li><li>webview-preload：webview 预加载桥</li></ul></div>
+    <div class="card"><div class="path">main/ipc/*</div><h3>IPC 处理器</h3>
+      <ul><li>recorder / window / webview / credential</li><li>recording-mgmt（删除/下载/上传/同步/继续/重录）</li><li>preview（导出预览 / HTML 预览 / 地图预览）</li></ul></div>
+    <div class="card"><div class="path">renderer/modules</div><h3>渲染层 UI</h3>
+      <ul><li>recording-ui：最大 UI 模块（表单/步骤/场景故事）</li><li>webview-recording：应用内录制编排</li><li>preview / management / demo / settings 视图</li></ul></div>
+  </div>
+</section>
+
+<!-- 3. 目录映射表 -->
+<section>
+  <h2><span class="tag">03</span>目录 → 职责 映射</h2>
+  <p class="lead">项目根目录结构与职能一一对应。</p>
+  <table>
+    <tr><th>路径</th><th>类型</th><th>职责</th></tr>
+    <tr><td><code>main/</code></td><td>主进程</td><td>main.js（入口/窗口/托盘）、preload.js（桥）、ipc/（6 个功能化 handler）</td></tr>
+    <tr><td><code>src/</code></td><td>内核</td><td>recorder / html-capture / export / map-preview / credential-store / config-transformer / css-utils / inject/</td></tr>
+    <tr><td><code>src/map-template/</code></td><td>静态资源</td><td>地图预览模板（index.html / app.js / styles.css / img/），仅被复制不修改</td></tr>
+    <tr><td><code>renderer/</code></td><td>渲染层</td><td>panel.html + modules/（common / recording / preview / management / demo / settings）+ styles/</td></tr>
+    <tr><td><code>renderer/modules/recording/</code></td><td>录制 UI</td><td>shared/（UI·动作·导航·凭证·已导出）、internal/webview-recording、rerecord/</td></tr>
+    <tr><td><code>build/ · icon.png</code></td><td>构建资源</td><td>打包图标（ico/png），由 electron-builder 引用</td></tr>
+    <tr><td><code>electron-builder.config.cjs</code></td><td>构建配置</td><td>Windows 安装包输出（路径无关，可装任意位置）</td></tr>
+    <tr><td><code>diag/ · snap.ps1 · uia.ps1</code></td><td>诊断/脚本</td><td>asar 诊断、快照/UIA 自动化辅助脚本</td></tr>
+  </table>
+</section>
+
+<!-- 4. 核心数据流 -->
+<section>
+  <h2><span class="tag">04</span>核心数据流</h2>
+  <p class="lead">以"一次完整录制 + 导出"为主线，展现 渲染 ↔ 主进程 ↔ 内核 的协作。</p>
+  <div class="flow">
+    <div class="step"><b>① 输入 URL</b><small>navigation → 右侧 webview 加载页面</small></div>
+    <div class="conn">→</div>
+    <div class="step"><b>② 录制表单</b><small>recording-ui 配置场景/模块/步骤标题</small></div>
+    <div class="conn">→</div>
+    <div class="step"><b>③ 元素拾取</b><small>inject(element-helper) 高亮 → elementSelected</small></div>
+    <div class="conn">→</div>
+    <div class="step"><b>④ 捕获快照</b><small>recorder → HtmlCapture.captureStep</small></div>
+    <div class="conn">→</div>
+    <div class="step"><b>⑤ 写文件</b><small>Exporter → 静态 HTML + demo_config</small></div>
+    <div class="conn">→</div>
+    <div class="step"><b>⑥ 预览/导出</b><small>preview-ipc 本地预览 / 地图预览</small></div>
+  </div>
+  <div class="legend">
+    <span><i class="dot" style="background:#2f6bff"></i>主进程内核</span>
+    <span><i class="dot" style="background:#f59e0b"></i>Preload 桥</span>
+    <span><i class="dot" style="background:#00a98f"></i>渲染层 UI</span>
+  </div>
+  <div class="note">⚠ <b>继续录制 / 重录</b>：从 <code>recording-meta/&lt;dir&gt;/recording_data.json</code> 回载模块树，保存时 <code>_sequentialRenumber</code> 会重跑并重注入导航脚本——正则必须只匹配本录制器注入的脚本，否则误删页面正文。</div>
+</section>
+
+<!-- 5. 数据模型层级 -->
+<section>
+  <h2><span class="tag">05</span>数据模型层级</h2>
+  <p class="lead">录制状态的单一真相源结构（Recorder.mainModules 树）。</p>
+  <div class="tree">
+<span class="k">sceneConfig</span> { sceneTitle, sceneSubTitle, sceneName, <span class="m">sceneCode</span>, environment, envBaseUrl }
+│
+└─ <span class="k">mainModules[]</span>            <span class="v">// 主模块（"地图-场景"）</span>
+   ├─ subModules[]         <span class="v">// 子模块（步骤分组）</span>
+   │  └─ steps[]           <span class="v">// 具体步骤</span>
+   │     ├─ stepId         <span class="v">// step1..N 唯一连续</span>
+   │     ├─ mainTitle / subTitle
+   │     ├─ htmlContent    <span class="v">// 捕获快照 + autouse SDK</span>
+   │     ├─ marks[]        <span class="v">// 标记元素</span>
+   │     ├─ selector.isMobileGuide  <span class="v">// subStep 级移动端判定</span>
+   │     └─ introduction   <span class="v">// 场景故事主/副标</span>
+   └─ introduction.isMobileGuide   <span class="v">// 父级回退</span>
+  </div>
+  <div class="note">判定规则：<b>内容反推（viewport meta） › subStep.selector.isMobileGuide › 场景级 isMobileMode</b>。每个 subStep 独立计算，解决同一 subModule 内 PC/移动混合。</div>
+</section>
+
+<!-- 6. 持久化与存储 -->
+<section>
+  <h2><span class="tag">06</span>持久化与存储目录</h2>
+  <p class="lead">全部位于 <code>app.getPath('userData')</code> 下，导出产物与内部元数据隔离。</p>
+  <div class="two">
+    <div>
+      <table>
+        <tr><th>目录</th><th>内容</th></tr>
+        <tr><td><code>recordings/</code></td><td>导出产物（HTML/CSS + demo_config.json）</td></tr>
+        <tr><td><code>recording-meta/&lt;dir&gt;/</code></td><td>recording_data.json（内部：继续/重录用，不进导出包）</td></tr>
+        <tr><td><code>credentials.json</code></td><td>safeStorage 加密的账号密码</td></tr>
+        <tr><td><code>browser-profile/</code></td><td>webview 持久化 cookies / 登录态</td></tr>
+        <tr><td><code>os.tmpdir()/map-preview-*/</code></td><td>地图预览临时副本（只读源，用完即弃）</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="note" style="margin-top:0">📦 打包：<code>npm run build:win</code> → electron-builder 产出路径无关 Windows 安装包，分发给终端用户。</div>
+      <div class="note" style="background:#eef7ff;border-color:var(--accent)">🔌 外部浏览器（Playwright）已移除：应用仅使用<strong>应用内 webview</strong>录制/预览；browserManager 恒为 null，相关 IPC 降级为"未启用"。</div>
+    </div>
+  </div>
+</section>
+
+<!-- 7. UI 三栏 -->
+<section>
+  <h2><span class="tag">07</span>UI 三栏布局（panel.html）</h2>
+  <p class="lead">左菜单切换视图，中列输入与内容，右列可折叠的 webview 预览 + 步骤列表。</p>
+  <div class="tree" style="background:#f8fafc;color:#27313f">
+<span class="k">#layout</span>
+├─ <span class="m">#sidebar</span>          左菜单：页面录制 / 场景管理 / 定制演示 / 设置
+├─ <span class="m">#mainColumn</span>      中列：middle-header + url-bar + #content + statusBar
+│   └─ 录制表单 / 管理卡片 / 演示 / 设置（按 currentView 切换）
+├─ <span class="m">#columnDivider</span>   中列展开/收起分隔
+└─ <span class="m">#rightColumn</span>     右列（可折叠）
+    ├─ right-toolbar：分辨率 / 📱移动端 / 适配 / 缩放 / 全屏
+    ├─ #rightContent：步骤列表
+    └─ #previewContainer
+        ├─ #bannerContainer   Banner 轮播（未开浏览器时）
+        ├─ #tabBar + #tabPages  多 webview（_blank → 新 tab）
+        └─ <span class="v">#previewWebview</span>  partition="persist:webview" allowpopups
+  </div>
+</section>
+
+<!-- 8. 前后端交互模型 -->
+<section>
+  <h2><span class="tag">08</span>前后端交互模型</h2>
+  <p class="lead">应用<strong>没有传统 HTTP 后端服务</strong>：所谓"前端"是渲染进程 UI，"后端"是主进程内核，二者仅通过 <b>IPC（进程间通信）</b> 桥接。唯一的"远端服务"是录制产物在<strong>回放/预览时</strong>才会访问的资源托管主机与 SDK CDN。</p>
+
+  <div class="two">
+    <div>
+      <h3 style="font-size:14px;margin:6px 0 8px;color:var(--accent)">① 进程内：渲染进程 ⇄ 主进程（IPC 通道）</h3>
+      <table>
+        <tr><th>通道 / 方向</th><th>用途</th></tr>
+        <tr><td><code>recorder-action</code><br>render→main</td><td>统一录制动作 → <code>recorder.handleAction</code></td></tr>
+        <tr><td><code>stateSync</code><br>main→render(推送)</td><td>状态变更主动推给 UI 重渲染</td></tr>
+        <tr><td><code>get-inject-script</code> → <code>elementSelected</code></td><td>取注入脚本 → webview 拾取 → 回传选择结果</td></tr>
+        <tr><td><code>get/save/delete-credential</code></td><td>凭证加解密读写（safeStorage）</td></tr>
+        <tr><td><code>get-recorded-exports / delete / download / upload / sync-to-prd / continue / rerecord / reload</code></td><td>场景管理与元数据回载</td></tr>
+        <tr><td><code>preview-export / preview-html-file / generate-map-preview</code></td><td>本地预览与地图预览</td></tr>
+        <tr><td><code>get-webview-preload-path / sync-cookies-*</code></td><td>webview 注入与登录态保持</td></tr>
+        <tr><td><code>renderer-log</code> render→main</td><td>渲染进程日志桥（终端可见）</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3 style="font-size:14px;margin:6px 0 8px;color:var(--accent3)">② 远端服务依赖（仅回放/预览时触发）</h3>
+      <div class="tree" style="background:#0f172a">
+<span class="k">导出 HTML 运行时加载</span>
+├─ 资源主机 (originName)
+│   <span class="v">dev/prd:</span> xft-service-marketing.paas.cmbchina.cn
+│            /resource/file/demonstration/&lt;sceneCode&gt;/
+│   → 加载 CSS / iframe 内容
+├─ 气泡 SDK (autouse)
+│   xft-demo.cmburl.cn/helpapp/plugin/xft_help_autouse.js
+│   → 录制 HTML 自带，平台据此渲染指引气泡
+├─ <span class="m">sync-to-prd</span>: 本地复制 + 改写 origin(dev→prd)
+│   生成 &lt;dir&gt;_prd_copy（不推送服务器）
+└─ <span class="m">upload-recording</span>: <b>占位 (TODO)</b>
+    资源接口 / 配置接口地址待定，未真正实现
+      </div>
+      <div class="note" style="background:#eef7ff;border-color:var(--accent)">🔌 即开即用的"前后端"全在本地进程内完成；远端主机只承载<strong>最终产物的静态资源分发</strong>，不参与录制控制流。</div>
+    </div>
+  </div>
+</section>
+
+<!-- 9. 数据存储与取用 -->
+<section>
+  <h2><span class="tag">09</span>数据存储与取用（读写全链路）</h2>
+  <p class="lead">数据分两类：<b>导出产物</b>（给用户/平台消费）与 <b>内部元数据</b>（支撑继续录制/重录/地图预览）。二者目录隔离；所有读写走主进程文件系统，渲染层通过 IPC 间接调用。</p>
+
+  <div class="two">
+    <div>
+      <h3 style="font-size:14px;margin:6px 0 8px;color:var(--accent2)">✍️ 写入（存）</h3>
+      <table>
+        <tr><th>动作</th><th>落盘位置</th></tr>
+        <tr><td>保存 / 导出<br><small>Exporter.export</small></td><td><code>recordings/&lt;dir&gt;/</code> stepN.html · stepN.css · iframe · <b>demo_config.json</b><br><code>recording-meta/&lt;dir&gt;/recording_data.json</code></td></tr>
+        <tr><td>保存凭证<br><small>CredentialStore</small></td><td><code>credentials.json</code>（safeStorage 加密）</td></tr>
+        <tr><td>下载场景</td><td>用户选定目录（dialog 选择，整目录拷贝）</td></tr>
+        <tr><td>同步到生产</td><td>本地 <code>&lt;dir&gt;_prd_copy/</code> + 改写 origin + 同步 meta</td></tr>
+        <tr><td>删除场景</td><td>移除 <code>recordings/&lt;dir&gt;</code> 与 <code>recording-meta/&lt;dir&gt;</code></td></tr>
+      </table>
+    </div>
+    <div>
+      <h3 style="font-size:14px;margin:6px 0 8px;color:var(--accent)">📖 读取（取）</h3>
+      <table>
+        <tr><th>入口</th><th>取用来源</th></tr>
+        <tr><td>场景管理列表<br><small>get-recorded-exports</small></td><td>扫描 <code>recordings/</code>，解析各 <code>demo_config.json</code> 取标题/步骤</td></tr>
+        <tr><td>应用内预览<br><small>preview-html-file</small></td><td>读导出 HTML 路径 → webview <code>file://</code> 加载</td></tr>
+        <tr><td>继续录制 / 重录 / 重载</td><td>读 <code>recording-meta/&lt;dir&gt;/recording_data.json</code> → 恢复 Recorder 状态树</td></tr>
+        <tr><td>地图预览<br><small>generate-map-preview</small></td><td>读 <code>recording_data.json</code> → transform → 临时目录</td></tr>
+        <tr><td>凭证自动填充</td><td>读 <code>credentials.json</code> → 解密 → 注入 webview</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h3 style="font-size:14px;margin:18px 0 8px;color:var(--accent)">🔄 一次录制的数据生命周期</h3>
+  <div class="flow">
+    <div class="step"><b>① 录制中</b><small>webview 拾取 → 内存状态树（Recorder.mainModules）</small></div>
+    <div class="conn">→</div>
+    <div class="step"><b>② 保存</b><small>Exporter 落盘：recordings/ 产物 + recording-meta/ 内部数据</small></div>
+    <div class="conn">→</div>
+    <div class="step"><b>③ 管理/预览</b><small>扫描 demo_config.json 列表；webview 加载 HTML（file://）</small></div>
+    <div class="conn">→</div>
+    <div class="step"><b>④ 继续/重录</b><small>回读 recording_data.json → 重载状态树</small></div>
+    <div class="conn">→</div>
+    <div class="step"><b>⑤ 分发</b><small>下载(拷贝) / sync-to-prd(改写 origin) / 上传(待接)</small></div>
+  </div>
+  <div class="note">⚠ <code>recording_data.json</code> 是"内部数据"，刻意隔离在 <code>recording-meta/</code> 而非导出目录，确保下载/上传产物不泄漏可继续录制的原始结构；<code>sync-to-prd</code> 会同步复制并改写其 sceneCode，使副本仍可被继续/重录。</div>
+</section>
+
+<div class="foot">playwright-page-shot · 架构分析 · 基于代码结构（main / src / renderer / main/ipc）自动梳理</div>
+</div>
+</body>
+</html>

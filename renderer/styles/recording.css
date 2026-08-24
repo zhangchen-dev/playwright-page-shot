@@ -567,3 +567,227 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ===== ★ 树形层级交互（模块 / 主步骤 / 子步骤） ===== */
+
+/* 模块 tabs 行 */
+.module-tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.module-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.module-tab:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-accent);
+}
+
+.module-tab.active {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(25, 102, 255, 0.25);
+}
+
+.module-tab-add {
+  background: transparent;
+  border-style: dashed;
+  color: var(--accent-blue-light);
+  font-weight: 500;
+}
+
+.module-tab-add:hover {
+  background: var(--accent-blue-bg);
+  border-color: var(--accent-blue);
+}
+
+/* 树行（主步骤 / 子步骤通用） */
+.tree-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.tree-row:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-accent);
+}
+
+.tree-row.active {
+  background: var(--accent-blue-bg);
+  border-color: var(--accent-blue);
+  font-weight: 600;
+}
+
+.tree-row.active .tree-row-title {
+  color: var(--accent-blue-light);
+}
+
+.tree-row-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-row-meta {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  background: rgba(19, 34, 64, 0.06);
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+
+.tree-row.active .tree-row-meta {
+  background: rgba(25, 102, 255, 0.15);
+  color: var(--accent-blue-light);
+}
+
+/* ===== ★ 可编辑节点树（录制阶段三层级树） ===== */
+
+.tree-root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tree-node {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-section);
+  overflow: hidden;
+}
+
+.tree-node-current {
+  border-color: var(--border-subtle);
+  background: var(--bg-section);
+}
+
+.tree-node-historical {
+  background: var(--bg-input);
+}
+
+.tree-node-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tree-node-header.collapsible {
+  cursor: pointer;
+}
+
+.tree-node-header.collapsible:hover {
+  background: rgba(19, 34, 64, 0.04);
+}
+
+.tree-node-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--accent-blue);
+  border-radius: 4px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+}
+
+.tree-node-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ★ 层级辅助标识文案（模块 / 主步骤 / 子步骤），低调灰，置节点头部左侧 */
+.tree-node-tag {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: rgba(19, 34, 64, 0.06);
+  border-radius: 4px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  user-select: none;
+}
+
+.tree-node-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: rgba(19, 34, 64, 0.06);
+  padding: 1px 7px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.tree-arrow {
+  width: 12px;
+  text-align: center;
+  color: var(--text-dark);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.tree-node-body {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tree-node-historical .tree-node-body {
+  background: var(--bg-section);
+}
+
+.tree-leaf .tree-node-header {
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.tree-children {
+  margin: 8px 0 4px 14px;
+  padding-left: 12px;
+  border-left: 2px solid rgba(19, 34, 64, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tree-add-btn {
+  align-self: flex-start;
+  border-style: dashed;
+}

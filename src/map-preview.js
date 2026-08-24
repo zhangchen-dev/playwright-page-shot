@@ -152,7 +152,21 @@ const AUTOUSE_BUBBLE_CSS = `.xftautouseplugin-tour-guide {
 //     自身的 clientWidth/Height 作为目标算 scale（不用父容器壳子的尺寸），
 //     同时不再覆盖 iframe.style.width/height（让 handleMobileResize 设置的设计
 //     尺寸生效），只通过 transform: scale 做视觉适配
-const MAP_PREVIEW_VERSION = '21';
+// 22: 修复「未开移动端却整页套手机壳」——内容反推（detectMobileFromContent）只用于
+//     【降级】（用户开了移动端录制、但某步内容确为 PC 时回退全屏），绝不再把
+//     【显式 PC 录制】（isMobileMode=false 且本步无 isMobileGuide=true）的步骤
+//     依据页面自带的移动 viewport meta「升级」成手机壳。很多响应式 PC 站点本身
+//     就带 user-scalable=no / maximum-scale=1 / viewport-fit=cover，会导致误判。
+// 23: 修复「v22 把显式选了移动端的录制也误降级成 PC」——改为【用户显式意图为唯一权威】：
+//     只要录制时开了📱移动端开关（场景级 isMobileMode=true）或本子步骤自身
+//     introduction.isMobileGuide===true（继续录制/重录按各步存储值），一律移动端手机壳，
+//     绝不按页面内容反推降级；仅当两者都无（用户未选移动端）才按 PC 全屏，绝不升级。
+// 24: 改为 per-step 独立移动端标记（用户需求：混合录制——这一步 mobile、下一步 PC）。
+//     recorder 的 _nextStep/_nextStepWebview 接收 msg.isMobile 并写入 snapshot.isMobileGuide；
+//     transformRecordingToMockConfig / export.js 以 snapshot.isMobileGuide 为权威，
+//     仅在缺失时回退到 subModule.introduction.isMobileGuide / 场景级 isMobileMode。
+//     detectMobileMode 也扫 per-step——任一子步骤选了 mobile → 场景视为含 mobile。
+const MAP_PREVIEW_VERSION = '24';
 
 // 导航脚本全局正则（与 recorder._sequentialRenumber 一致）：预览副本中清除原有跳转脚本
 // ⚠️ 关键约束：正则必须限定在【单个 <script> 标签内】，用 (?:(?!<\/script>)[\s\S])*? 阻止跨 </script> 匹配。
@@ -294,6 +308,10 @@ function detectMobileMode(recData, dirPath) {
   for (const m of (recData.mainModules || [])) {
     for (const sub of (m.subModules || [])) {
       if (sub.introduction && sub.introduction.isMobileGuide) return true;
+      // ★ per-step 检查（新录制）：任一子步骤标记 mobile → 场景视为含 mobile（混合录制也能正确识别）
+      for (const step of (sub.steps || [])) {
+        if (step && step.isMobileGuide === true) return true;
+      }
     }
   }
   // 兜底：旧场景从 demo_config.json 探测
@@ -391,8 +409,9 @@ function transformRecordingToMockConfig(recData, isMobileMode) {
       const subFallbackMobile = subHasOwnFlag ? !!subIntro.isMobileGuide : !!isMobileMode;
 
       // ★ 每个 captured page（step）= 该主步骤下的一个子步骤（页面跳转），仅在气泡中体现，不在地图展开
-      //   ★ 移动端标记必须在 subStep 级别独立计算——同一 subModule 内可能既有 PC 页又有移动页，
-      //     仅看第一步 HTML 会漏掉混合场景。这里每步独立反推，失败时回退到 subModule/场景级标记。
+      //   ★ 移动端标记以 per-step snapshot.isMobileGuide 为权威（新录制），向下回退到
+      //     subModule.introduction.isMobileGuide（兼容旧录制）→ 场景级 isMobileMode。
+      //     这样同一 subModule 内的不同步骤可以独立 mobile/PC（混合录制）。
       const subStepList = (subMod.steps || []).map((snapshot) => {
         const marks = Array.isArray(snapshot.marks) ? snapshot.marks : [];
         const firstMark = marks[0] || {};
@@ -401,9 +420,13 @@ function transformRecordingToMockConfig(recData, isMobileMode) {
         const position = firstMark.position || 'right';
         // ★ 是否展示「下一步」按钮：与录制选择一致（默认 true；用户取消勾选为 false）
         const showNextStep = firstMark.showNextStep !== false;
-        // ★ 该子步骤的移动端标记：以本子步骤自身 HTML 为权威，失败回退 subModule/场景级
-        const contentMobile = detectMobileFromContent(snapshot.htmlContent || '');
-        const subStepIsMobile = contentMobile !== null ? contentMobile : subFallbackMobile;
+        // ★ per-step 移动端标记优先：用户在该步骤录制时是否选了移动端（snapshot.isMobileGuide），
+        //   回退到 subModule.introduction.isMobileGuide（旧录制）→ 场景级 isMobileMode。
+        //   整段场景是否 mobile 取决于"任一步骤选了 mobile"，不取决于全局开关。
+        const stepHasOwnFlag = typeof snapshot.isMobileGuide === 'boolean';
+        const subStepIsMobile = stepHasOwnFlag
+          ? !!snapshot.isMobileGuide
+          : (subHasOwnFlag ? !!subIntro.isMobileGuide : !!isMobileMode);
         return {
           title: stepTitle,
           content: question,
@@ -418,9 +441,10 @@ function transformRecordingToMockConfig(recData, isMobileMode) {
           },
         };
       });
-      // ★ 移动端标记：subModule 级别（用于地图卡片/UI 上展示），取 subStep 列表中真值优先
+      // ★ 移动端标记：subModule 级别（用于地图卡片/UI 上展示），若任一 subStep 选了 mobile 则该 subModule 也视为 mobile
+      const subModuleHasMobile = (subMod.steps || []).some(s => s.isMobileGuide === true);
       const introduction = Object.assign({}, subIntro, {
-        isMobileGuide: subFallbackMobile,
+        isMobileGuide: subFallbackMobile || subModuleHasMobile,
       });
       return {
         stepTitle: subMod.mainStepTitle || '演示主步骤',

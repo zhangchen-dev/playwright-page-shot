@@ -208,8 +208,9 @@ class Exporter {
       for (const subMod of mainMod.subModules) {
         if (!subMod.steps || subMod.steps.length === 0) continue;
 
-        // ★ 按子步骤自身的移动端标记决定（录制时已按步骤写入 subModule.introduction.isMobileGuide），
-        //   仅当该子步骤未携带自身标记时，回退到场景级 recorder.isMobileMode（兼容旧录制）。
+        // ★ 按子步骤自身的移动端标记决定（录制时已按步骤写入 snapshot.isMobileGuide），
+        //   仅当该子步骤未携带自身标记时，回退到 subModule.introduction.isMobileGuide（兼容旧录制），
+        //   再回退到 recorder.isMobileMode（场景级）。
         const subIntro = subMod.introduction || {};
         const subHasOwnFlag = typeof subIntro.isMobileGuide === 'boolean';
         const subIsMobile = subHasOwnFlag ? !!subIntro.isMobileGuide : !!recorder.isMobileMode;
@@ -229,6 +230,11 @@ class Exporter {
         // 遍历步骤中的标记
         let stepOrderInModule = 0;
         for (const snapshot of subMod.steps) {
+          // ★ per-step 移动端标记优先（新录制）：用户在该步骤录制时开关 ON → 该步 mobile；
+          //   开关 OFF → 该步 PC。回退链：per-step → subModule.introduction.isMobileGuide → recorder.isMobileMode（场景级）。
+          //   这样同一 subModule 内的不同步骤可以独立标记 mobile/PC（混合录制）。
+          const stepHasOwnFlag = typeof snapshot.isMobileGuide === 'boolean';
+          const stepIsMobile = stepHasOwnFlag ? !!snapshot.isMobileGuide : subIsMobile;
           const marks = snapshot.marks || [];
           for (const mark of marks) {
             stepOrderInModule++;
@@ -239,8 +245,9 @@ class Exporter {
               placeSelector: '#' + (mark.elementId || ''),
               clickSelector: '#' + (mark.elementId || ''),
             };
-            // ★ 移动端录制：selector.isMobileGuide（优先本子步骤自身标记，否则场景级），供真实演示系统/地图模板读取
-            selectorObj.isMobileGuide = subIsMobile;
+            // ★ 移动端录制：per-step selector.isMobileGuide（用户在该步录制时是否选了移动端），
+            //   供真实演示系统/地图模板读取——同 subModule 内可混合 PC 步骤与移动步骤。
+            selectorObj.isMobileGuide = stepIsMobile;
             // ★ 是否展示「下一步」按钮：与录制选择一致（recorder 默认 true；用户取消勾选则 false）。
             //   始终写入该字段（true/false），确保配置显式反映录制选择，便于本地预览与真实演示系统读取。
             selectorObj.showNextStep = mark.showNextStep !== false;

@@ -52,14 +52,26 @@ export function doCompleteMark() {
 // ===== 结束并保存流程 =====
 export async function handleEndAndSave() {
   const mainTitleInput = document.getElementById('markMainTitleInput');
-  if (appState.hasSelectedElement && mainTitleInput) {
-    const mainTitle = mainTitleInput.value.trim();
+  // ★ 兼容：若「选择即标记」的异步链路尚未落库（hasSelectedElement 已被自动标记清空但 _pendingMark 仍在），
+  //   用 _pendingMark 兜底恢复选择并补提交，确保末步指引不丢。
+  if (appState.hasSelectedElement && !appState._pendingMark) {
+    appState._pendingMark = appState.selectedElementData
+      ? { elementId: appState.selectedElementData.elementId, isInIframe: appState.selectedElementData.isInIframe, iframeSrc: appState.selectedElementData.iframeSrc, text: appState.selectedElementData.text }
+      : null;
+  }
+  if (appState.hasSelectedElement || appState._pendingMark) {
+    if (appState._pendingMark && !appState.hasSelectedElement) {
+      appState.selectedElementData = appState._pendingMark;
+      if (mainTitleInput && !mainTitleInput.value) mainTitleInput.value = appState._pendingMark.text || '';
+    }
+    const mainTitle = mainTitleInput ? mainTitleInput.value.trim() : '';
     if (!mainTitle) {
       showToast('请先输入主标题再结束保存', 'error');
       return;
     }
     doCompleteMark();
   }
+  appState._pendingMark = null;
 
   // ★ 不再选择保存目录 — recorder.outputDir 已指向应用 userData/recordings
 
@@ -132,6 +144,13 @@ export async function handleEndAndSave() {
       }
     }
 
+    // ★ 移动端录制标记：以 checkbox DOM 真实状态为权威（UI 显示啥就存啥），appState 兜底。
+    //   防止 appState 因视图切换 / 异步渲染等出现短暂不同步时，"用户开了📱移动端却被存成 PC"。
+    //   只要开关实际是 ON（或 appState 已为 true）→ 一律按移动端录制，绝不丢失。
+    //   （注意：const 声明必须在对象字面量外侧，对象里只能放键值对/展开，不能放语句）
+    const _mobileSwitchCb = document.getElementById('mobileModeSwitch');
+    const _mobileSwitchChecked = !!(appState.isMobileMode || (_mobileSwitchCb && _mobileSwitchCb.checked));
+
     result = await sendAction('endAndSave', {
       modName: modNameInput ? modNameInput.value.trim() : '',
       mainModName: mainModNameInput ? mainModNameInput.value.trim() : '',
@@ -147,8 +166,8 @@ export async function handleEndAndSave() {
       isWebviewMode: true,
       // ★ 重录模式：传递保存模式（'replace' / 'insert' / 'replace-single'）
       reRecordSaveMode: inReRecord ? (appState._reRecordSaveMode || 'replace') : undefined,
-      // ★ 移动端录制标记：透传给 recorder，供导出 selector.isMobileGuide 使用
-      isMobile: appState.isMobileMode,
+      // ★ 移动端录制标记：透传给 recorder，供导出 selector.isMobileGuide 使用（值在对象外侧已计算）
+      isMobile: _mobileSwitchChecked,
     });
   } finally {
     // ★ 结束保存：隐藏 loading 遮罩，恢复交互
@@ -190,14 +209,10 @@ export async function handleEndAndSave() {
 }
 
 export function updateMarkUI() {
-  const completeMarkBtn = document.getElementById('completeMarkBtn');
   const markBtn = document.getElementById('markBtn');
   const selectionHint = document.getElementById('selectionHint');
+  const nextStepBtn = document.getElementById('nextStepBtn');
 
-  if (completeMarkBtn) {
-    completeMarkBtn.disabled = !appState.hasSelectedElement;
-    completeMarkBtn.className = appState.hasSelectedElement ? 'btn btn-primary btn-sm' : 'btn btn-primary btn-sm btn-disabled';
-  }
   if (markBtn) {
     if (appState.isSelectingMode) {
       markBtn.textContent = '取消选择';
@@ -209,6 +224,12 @@ export function updateMarkUI() {
   }
   if (selectionHint) {
     selectionHint.style.display = appState.isSelectingMode ? '' : 'none';
+  }
+  // ★ 选中元素或已存在标记时即时启用「下一步」，避免依赖异步 stateSync 才解锁按钮
+  if (nextStepBtn) {
+    const canNext = !!(appState.hasSelectedElement || (appState.state.markedElements && appState.state.markedElements.length > 0));
+    nextStepBtn.disabled = !canNext;
+    nextStepBtn.className = canNext ? 'btn btn-primary btn-sm' : 'btn btn-primary btn-sm btn-disabled';
   }
 }
 

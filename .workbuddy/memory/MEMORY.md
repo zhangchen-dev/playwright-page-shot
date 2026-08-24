@@ -9,17 +9,20 @@
 
 ## 地图预览（src/map-template + src/map-preview.js）
 - 地图模板打包在 `src/map-template`（index.html/app.js/styles.css/img），主进程 `src/map-preview.js` 用 `copyAsarSafe` 复制到临时目录 `os.tmpdir()/map-preview-<sceneName>/map`，仅写临时目录、绝不碰源录制/导出。
-- 移动端判定 v16 起以「**页面内容**」为权威（recorder 端全局 isMobileMode 会污染每步 introduction.isMobileGuide，无法依赖）：
-  - `detectMobileFromContent(html)` 启发式（map-preview.js）：viewport meta 解析
-    - 强移动端：`user-scalable=no` + `maximum-scale=1`（缩放锁定），或含 `viewport-fit=cover`（刘海屏适配）
-    - 强 PC：仅 `width=device-width, initial-scale=1`（无缩放锁定）
-    - 无 viewport meta → 默认 PC（recorder 不注入此 meta，全部来自被录制页面；纯桌面/SSR 站点通常无此 meta）
-  - 优先级：**内容反推 > 子步骤自身 introduction.isMobileGuide > 场景级 isMobileMode**
-  - 每个 subStep 独立计算 `selector.isMobileGuide`（不是只算 subModule 级），解决同一 subModule 内既有 PC 页又有移动页的混合场景
+- 移动端判定（v23 起 + **v24 per-step 重构**）：**每一步独立判断，用户显式意图为唯一权威**。
+  - **per-step 存储（新录制 v24+）**：recorder 的 `_nextStep` / `_nextStepWebview` 接收 `msg.isMobile`（来自前端 nextStep 点击时的 checkbox 真实状态），写入 `snapshot.isMobileGuide`。
+  - **判定链（map-preview.js transformRecordingToMockConfig + export.js）**：`step.isMobileGuide`（per-step，权威）→ `subMod.introduction.isMobileGuide`（兼容旧录制）→ 场景级 `recData.isMobileMode` / `recorder.isMobileMode`。
+  - **用户行为**：每一步录制时用户可独立切换 📱 开关——这一步开→该步 mobile，下一步关→该步 PC，**支持混合录制**（同一 subModule 内可同时含 PC 步骤与移动步骤）。
+  - **`detectMobileMode` 也扫 per-step**：任一子步骤 `isMobileGuide===true` → 场景视为含 mobile（混合场景能正确识别）。
+  - **不再依赖 `subMod.introduction.isMobileGuide` 整段共享**：旧逻辑下"一开全开"的根因——`Object.assign` 把 `isMobile` 写到整段 introduction 后，导出再据此套所有 mark。v24 per-step 后该字段仅作回退。
+  - ⚠️ 历史：v16 内容反推置顶→PC 被误升级；v22 内容只降级→显式 mobile 被误降级；v23 显式意图唯一权威但仍是整段共享；v24 per-step 独立存储→彻底解决"混合录制一开全开"。
+  - `detectMobileFromContent(html)` 函数仍保留（导出、地图模板等处），但 **`transformRecordingToMockConfig` 已不再调用它做判定**。
+  - 端到端链路（v24+）：录制每步时 📱 checkbox → `recording-ui.js` `nextStep` handler 写 `webviewData.isMobile` → IPC `nextStepWebview` → `recorder._nextStepWebview(msg)` 写 `snapshot.isMobileGuide` → `export.js` 据此写 `selectorObj.isMobileGuide`（每个 mark 独立）→ `map-preview.js` 按 `snapshot.isMobileGuide` 决定手机壳。
+  - **保存时开关状态防御（v23+）**：`recording-actions.js` 结束保存时不再仅读 `appState.isMobileMode`，而是**直接读 checkbox DOM 真实状态**（`document.getElementById('mobileModeSwitch').checked`）与 appState 取 OR——只要 UI 显示是 ON 就按移动端录制，杜绝"用户开了开关却因视图切换/异步导致 appState 短暂失同步而存成 PC"的丢失。
 - app.js `transformData()` 改为：subStep 自带 `selector.isMobileGuide` 时优先使用，否则回退父 `introduction.isMobileGuide`
 - 移动端手机壳尺寸：`handleMobileResize` 用 `document.documentElement.clientHeight`（**不要**用 `body.clientHeight`——`.pageBody` 是 `position:absolute` 不撑开 body，在 Electron webview 里 body 高度趋近 0，会被 min/max 钳成 280×450 过小壳子）。
 - FIT_SCRIPT **始终注入**，但脚本内用 `isMobileScene()` 守卫按当前步骤跳过等比缩放（移动步骤跳过，PC 步骤仍缩放）。
-- 缓存版本标记 `MAP_PREVIEW_VERSION`（当前 `'16'`，统一无后缀——按内容判定后 `-m/-p` 后缀失效不再需要）。
+- 缓存版本标记 `MAP_PREVIEW_VERSION`（当前 `'24'`；generator 检测到旧版本标记即删除重建，改检测/注入逻辑后务必 +1 使缓存失效）。
 - 场景故事按钮：`#sceneStoryBtn` → `toggleSceneStory()`，展示时按钮置灰（`btnDisabled`）；`updateSceneStoryBtn()` 在 `init/startDemo/jumpStep/show·hideSceneStory` 同步状态。
 - ⚠️ 渲染层 `preview.js` 的 `openPreview` 强制 `forcePCMode=true`（PC UA），地图预览内嵌内容用 PC UA 渲染；真·移动端 UA 渲染需改共享预览基建（未做）。
 

@@ -1,5 +1,5 @@
 /**
- * 录制共用 UI：配置阶段 / 录制阶段 / introduction / 标记列表 / 模块列表 / 右栏步骤树
+ * 录制共用 UI：配置阶段 / 录制阶段（可编辑节点树）/ introduction / 标记列表 / 模块列表 / 右栏步骤树
  */
 import { appState } from '../../common/state.js';
 import { api, sendAction } from '../../common/api.js';
@@ -101,7 +101,11 @@ export function renderConfigPhase() {
   contentEl.appendChild(startBtn);
 }
 
-// ===== 渲染：录制阶段 =====
+// ===== 渲染：录制阶段（可编辑节点树） =====
+// 结构：模块（历史行 + 当前编辑表单节点）→ 主步骤（历史行 + 当前编辑表单节点）
+//       → 子步骤（历史行 + 当前编辑表单节点）
+// 每个层级的「当前」节点都是该层级的最后一个节点（可编辑）；历史节点只读、可展开查看子层。
+// 底层数据逻辑（recorder.js / IPC）保持不变，仅改交互渲染。
 export function renderRecordingPhase() {
   contentEl.innerHTML = '';
 
@@ -145,13 +149,6 @@ export function renderRecordingPhase() {
     contentEl.appendChild(banner);
   }
 
-  const currentMainMod = appState.state.currentMainModuleIndex >= 0 && appState.state.currentMainModuleIndex < appState.state.mainModules.length
-    ? appState.state.mainModules[appState.state.currentMainModuleIndex]
-    : null;
-  const currentSubMod = currentMainMod && appState.state.currentSubModuleIndex >= 0 && appState.state.currentSubModuleIndex < currentMainMod.subModules.length
-    ? currentMainMod.subModules[appState.state.currentSubModuleIndex]
-    : null;
-
   // ── 当前页面信息（应用内单页模式，无外部多标签页） ──
   const tabSection = el('div', 'tab-section');
   tabSection.id = 'tabSection';
@@ -165,46 +162,20 @@ export function renderRecordingPhase() {
     renderQuickLoginSection();
   }
 
-  // ── 当前模块 + 新增模块按钮 ──
-  contentEl.appendChild(el('div', 'section-title', '当前模块'));
-  const mainModuleBox = el('div', 'section-box');
+  // ===== 工具函数 =====
+  const getVal = (id) => {
+    const e = document.getElementById(id);
+    return e ? e.value.trim() : '';
+  };
 
-  // ★ 默认文案：模块主标题为空时自动填充“模块N”（N=当前模块序号，从1开始），
-  //   用户无需每次手填即可连续录制，后续可自己编辑
-  const mainModIdx = Math.max(0, appState.state.currentMainModuleIndex);
-  const mainModDefault = '模块' + (mainModIdx + 1);
-  const mainModNameField = formField({
-    label: '地图-场景主标题',
-    required: true,
-    placeholder: '例如：登录认证',
-    id: 'mainModNameInput',
-    value: currentMainMod ? (currentMainMod.mainModuleName || mainModDefault) : mainModDefault,
-  });
-  mainModuleBox.appendChild(mainModNameField.wrapper);
-
-  const mainModDescField = formField({
-    label: '地图-场景副标题',
-    placeholder: '选填，例如：用户输入账号密码并登录',
-    id: 'mainModDescInput',
-    value: currentMainMod ? currentMainMod.mainModuleDesc : '',
-  });
-  mainModuleBox.appendChild(mainModDescField.wrapper);
-
-  // ★ 新增模块按钮放在模块区域内
-  const addMainModuleBtn = el('button', 'btn btn-secondary btn-sm btn-full');
-  addMainModuleBtn.textContent = '＋  新增模块';
-  addMainModuleBtn.style.marginTop = '6px';
-  const mainModNameInput = mainModNameField.input;
-  const mainModDescInput = mainModDescField.input;
-  addMainModuleBtn.addEventListener('click', async () => {
-    const mainModName = mainModNameInput ? mainModNameInput.value.trim() : '';
-    const mainModDesc = mainModDescInput ? mainModDescInput.value.trim() : '';
-    const modName = document.getElementById('modNameInput') ? document.getElementById('modNameInput').value.trim() : '';
+  // ===== 新增模块 / 新增主步骤（按钮逻辑，数据不变） =====
+  async function onAddMainModule() {
+    const mainModName = getVal('mainModNameInput');
+    const mainModDesc = getVal('mainModDescInput');
+    const modName = getVal('modNameInput');
     const intro = collectIntroduction();
     appState.clearFormOnNextRender = true;
     updateStatus('正在处理...', 'var(--accent-blue)');
-
-    // ★ 应用内浏览器模式：先捕获 webview 页面数据
     let webviewData = null;
     if (appState.browserMode === 'in-app') {
       try { webviewData = await captureWebviewData(); } catch (err) {
@@ -215,102 +186,15 @@ export function renderRecordingPhase() {
       pageId: 'webview',
       ...(webviewData || {}),
     });
-  });
-  mainModuleBox.appendChild(addMainModuleBtn);
-
-  contentEl.appendChild(mainModuleBox);
-
-  // ── 当前主步骤 + introduction + 新增主步骤按钮 ──
-  contentEl.appendChild(el('div', 'section-title', '当前主步骤'));
-  const subModuleBox = el('div', 'section-box');
-
-  // ★ 默认文案：主步骤标题为空时自动填充“步骤N”（N=当前主步骤序号，从1开始），支持连续录制
-  const subModIdx = Math.max(0, appState.state.currentSubModuleIndex);
-  const subModDefault = '步骤' + (subModIdx + 1);
-  const modNameField = formField({
-    label: '地图-主任务步骤',
-    required: true,
-    placeholder: '例如：输入账号密码',
-    id: 'modNameInput',
-    value: currentSubMod ? (currentSubMod.mainStepTitle || subModDefault) : subModDefault,
-  });
-  subModuleBox.appendChild(modNameField.wrapper);
-
-  // ★ introduction 配置（可展开/收起）
-  const introToggleRow = el('div', 'intro-toggle-row');
-  const introToggleBtn = el('button', 'btn btn-link btn-sm');
-  const hasIntro = currentSubMod && currentSubMod.introduction;
-  introToggleBtn.textContent = hasIntro ? '▼ 收起当前主流程故事' : '▶ 添加当前主流程故事';
-  introToggleBtn.id = 'introToggleBtn';
-  subModuleBox.appendChild(introToggleRow);
-  introToggleRow.appendChild(introToggleBtn);
-
-  const introBox = el('div', 'intro-box');
-  introBox.id = 'introBox';
-  introBox.style.display = hasIntro ? 'block' : 'none';
-
-  // ★ 跨重渲染保留 intro 草稿：录制中标记元素/捕获步骤会触发 rerenderPanel 重建面板，
-  //    直接读 currentSubMod.introduction（此时尚未保存，为 null）会把已输入文案清空。
-  //    故用 savedInputValues 按「主步骤+子步骤」索引暂存，重渲染后回填输入框。
-  const introKey = appState.state.currentMainModuleIndex + '_' + appState.state.currentSubModuleIndex;
-  const introDraft = appState.savedInputValues['intro_' + introKey] || {};
-
-  const introQuestionField = formField({
-    label: '右下角场景故事主标',
-    placeholder: '例如：本方案要解决的核心问题',
-    id: 'introQuestionInput',
-    value: hasIntro ? (currentSubMod.introduction.question || '') : (introDraft.question || ''),
-  });
-  introBox.appendChild(introQuestionField.wrapper);
-
-  const introAnswerField = formField({
-    label: '右下角场景故事副标',
-    placeholder: '例如：方案带来的业务价值',
-    id: 'introAnswerInput',
-    value: hasIntro ? (currentSubMod.introduction.answer || '') : (introDraft.answer || ''),
-  });
-  introBox.appendChild(introAnswerField.wrapper);
-
-  subModuleBox.appendChild(introBox);
-
-  const introQuestionInput = introQuestionField.input;
-  const introAnswerInput = introAnswerField.input;
-
-  // ★ 实时把 intro 输入写入 savedInputValues 草稿，避免面板重渲染导致文案丢失
-  //    （recorder 的 mainModules 经深拷贝同步到 renderer，oninput 直接改 state 不会进导出，
-  //     最终仍由 collectIntroduction → 保存动作写入 recorder.subMod.introduction）
-  function persistIntroDraft() {
-    const q = introQuestionInput ? introQuestionInput.value.trim() : '';
-    const a = introAnswerInput ? introAnswerInput.value.trim() : '';
-    if (!q && !a) {
-      delete appState.savedInputValues['intro_' + introKey];
-    } else {
-      appState.savedInputValues['intro_' + introKey] = { question: q, answer: a };
-    }
   }
-  if (introQuestionInput) introQuestionInput.addEventListener('input', persistIntroDraft);
-  if (introAnswerInput) introAnswerInput.addEventListener('input', persistIntroDraft);
 
-  introToggleBtn.addEventListener('click', () => {
-    const isVisible = introBox.style.display !== 'none';
-    introBox.style.display = isVisible ? 'none' : 'block';
-    introToggleBtn.textContent = isVisible ? '▶ 添加当前主流程故事' : '▼ 收起当前主流程故事';
-  });
-
-  // ★ 新增主步骤按钮放在主步骤区域内
-  const addSubModuleBtn = el('button', 'btn btn-secondary btn-sm btn-full');
-  addSubModuleBtn.textContent = '＋  新增主步骤';
-  addSubModuleBtn.style.marginTop = '6px';
-  const modNameInput = modNameField.input;
-  addSubModuleBtn.addEventListener('click', async () => {
-    const modName = modNameInput ? modNameInput.value.trim() : '';
-    const mainModName = mainModNameInput ? mainModNameInput.value.trim() : '';
-    const mainModDesc = mainModDescInput ? mainModDescInput.value.trim() : '';
+  async function onAddSubModule() {
+    const modName = getVal('modNameInput');
+    const mainModName = getVal('mainModNameInput');
+    const mainModDesc = getVal('mainModDescInput');
     const intro = collectIntroduction();
     appState.clearFormOnNextRender = true;
     updateStatus('正在处理...', 'var(--accent-blue)');
-
-    // ★ 应用内浏览器模式：先捕获 webview 页面数据
     let webviewData = null;
     if (appState.browserMode === 'in-app') {
       try { webviewData = await captureWebviewData(); } catch (err) {
@@ -321,214 +205,440 @@ export function renderRecordingPhase() {
       pageId: 'webview',
       ...(webviewData || {}),
     });
-  });
-  subModuleBox.appendChild(addSubModuleBtn);
+  }
 
-  contentEl.appendChild(subModuleBox);
+  // ===== 折叠态记忆（仅作用于「当前」层级节点，避免重渲染后被收起） =====
+  if (!appState.expandedNodes) appState.expandedNodes = {};
+  function nodeExpanded(key, def) {
+    if (Object.prototype.hasOwnProperty.call(appState.expandedNodes, key)) return appState.expandedNodes[key];
+    return def;
+  }
+  // 让节点头部可点击折叠，并记住展开态（key 固定为层级语义，跨重渲染保持）
+  function makeCollapsible(header, body, children, key, def) {
+    header.classList.add('collapsible');
+    const expanded = nodeExpanded(key, def);
+    const arrow = el('span', 'tree-arrow', expanded ? '▾' : '▸');
+    // 箭头插在「层级标签」之后（第二个子元素位置）
+    if (header.children.length >= 2) header.insertBefore(arrow, header.children[1]);
+    else header.appendChild(arrow);
+    const apply = (open) => {
+      body.style.display = open ? '' : 'none';
+      if (children) children.style.display = open ? '' : 'none';
+      arrow.textContent = open ? '▾' : '▸';
+    };
+    apply(expanded);
+    header.addEventListener('click', () => {
+      const nowOpen = body.style.display === 'none';
+      apply(nowOpen);
+      appState.expandedNodes[key] = nowOpen;
+    });
+  }
 
-  // ── 元素标记 ──
-  contentEl.appendChild(el('div', 'section-title', '元素标记'));
-  const markBox = el('div', 'section-box');
+  // ===== 历史节点构建（只读、可展开） =====
+  function buildHistoricalModule(mm, mi) {
+    const node = el('div', 'tree-node tree-node-historical');
+    const header = el('div', 'tree-node-header collapsible');
+    const tag = el('span', 'tree-node-tag', '模块');
+    const arrow = el('span', 'tree-arrow', '▸');
+    const title = el('span', 'tree-node-title');
+    title.textContent = (mm.mainModuleName || ('模块' + (mi + 1)));
+    const meta = el('span', 'tree-node-meta');
+    meta.textContent = (mm.subModules ? mm.subModules.length : 0) + ' 主步骤';
+    header.appendChild(tag);
+    header.appendChild(arrow);
+    header.appendChild(title);
+    header.appendChild(meta);
 
-  // 选择模式提示
-  const selectionHint = el('div', 'selection-active-hint');
-  selectionHint.id = 'selectionHint';
-  selectionHint.textContent = '🎯 请在浏览器中点击要标记的元素 | Esc退出';
-  selectionHint.style.display = appState.isSelectingMode ? '' : 'none';
-  markBox.appendChild(selectionHint);
+    const children = el('div', 'tree-children');
+    children.style.display = 'none';
+    (mm.subModules || []).forEach((sm, si) => children.appendChild(buildHistoricalMainStep(sm, si, mi)));
 
-  // 标记操作行：选择按钮 + 主标题输入 + 标记按钮
-  const markRow = el('div', 'mark-action-row');
-  markRow.id = 'markActionRow';
+    header.addEventListener('click', () => {
+      const open = children.style.display !== 'none';
+      children.style.display = open ? 'none' : 'block';
+      arrow.textContent = open ? '▸' : '▾';
+    });
 
-  const markBtn = el('button', appState.isSelectingMode ? 'btn btn-danger btn-sm' : 'btn btn-primary btn-sm');
-  markBtn.textContent = appState.isSelectingMode ? '✕ 取消选择' : '⊕ 选择元素';
-  markBtn.id = 'markBtn';
-  markBtn.addEventListener('click', () => toggleSelectionMode());
-  markRow.appendChild(markBtn);
+    node.appendChild(header);
+    node.appendChild(children);
+    return node;
+  }
 
-  // ★ 默认文案：跨步骤继续编号 —— N = 全场景已录制标记总数 + 本步待提交数 + 1。
-  //   继续录制/重录时不会又从"标记1"开始，避免与已有步骤的标记重名。
-  const savedMarkCount = (appState.state.mainModules || []).reduce((sum, m) => (
-    sum + (m.subModules || []).reduce((s2, sm) => (
-      s2 + (sm.steps || []).reduce((s3, st) => s3 + ((st.marks || []).length), 0)
-    ), 0)
-  ), 0);
-  const markDefault = '标记' + (savedMarkCount + (appState.state.markedElements?.length || 0) + 1);
-  const mainTitleField = formField({
-    label: '',
-    placeholder: '主标题 (mainTitle)',
-    id: 'markMainTitleInput',
-    value: appState.selectedElementData ? (appState.selectedElementData.text || markDefault) : markDefault,
-    style: 'margin-bottom: 0; flex: 1;',
-  });
-  mainTitleField.wrapper.style.flex = '1';
-  mainTitleField.wrapper.style.marginBottom = '0';
-  markRow.appendChild(mainTitleField.wrapper);
+  function buildHistoricalMainStep(sm, si, mi) {
+    const node = el('div', 'tree-node tree-node-historical');
+    const header = el('div', 'tree-node-header collapsible');
+    const tag = el('span', 'tree-node-tag', '主步骤');
+    const arrow = el('span', 'tree-arrow', '▸');
+    const title = el('span', 'tree-node-title');
+    title.textContent = (sm.mainStepTitle || ('步骤' + (si + 1)));
+    const meta = el('span', 'tree-node-meta');
+    meta.textContent = (sm.steps ? sm.steps.length : 0) + ' 步';
+    header.appendChild(tag);
+    header.appendChild(arrow);
+    header.appendChild(title);
+    header.appendChild(meta);
 
-  const completeMarkBtn = el('button', 'btn btn-success btn-sm');
-  completeMarkBtn.textContent = '✓ 标记';
-  completeMarkBtn.id = 'completeMarkBtn';
-  completeMarkBtn.disabled = !appState.hasSelectedElement;
-  completeMarkBtn.addEventListener('click', () => doCompleteMark());
-  markRow.appendChild(completeMarkBtn);
+    const children = el('div', 'tree-children');
+    children.style.display = 'none';
+    (sm.steps || []).forEach((st, sti) => children.appendChild(buildHistoricalSubStep(st, sti)));
 
-  markBox.appendChild(markRow);
+    header.addEventListener('click', () => {
+      const open = children.style.display !== 'none';
+      children.style.display = open ? 'none' : 'block';
+      arrow.textContent = open ? '▸' : '▾';
+    });
 
-  const mainTitleInput = mainTitleField.input;
+    node.appendChild(header);
+    node.appendChild(children);
+    return node;
+  }
 
-  // 副标题
-  const subTitleField = formField({
-    label: '气泡指引副标题',
-    placeholder: '选填，例如：点击登录按钮',
-    id: 'markSubTitleInput',
-  });
-  markBox.appendChild(subTitleField.wrapper);
+  function buildHistoricalSubStep(st, sti) {
+    const node = el('div', 'tree-node tree-node-historical tree-leaf');
+    const header = el('div', 'tree-node-header');
+    const tag = el('span', 'tree-node-tag', '子步骤');
+    const title = el('span', 'tree-node-title');
+    const label = (st.marks && st.marks.length > 0) ? st.marks[0].mainTitle : ('子步骤' + (sti + 1));
+    title.textContent = label;
+    header.appendChild(tag);
+    header.appendChild(title);
+    node.appendChild(header);
+    return node;
+  }
 
-  // ★ position 下拉选择 — 与下一步按钮开关并排
-  const positionRow = el('div', 'form-field-row');
+  // ===== 当前子步骤编辑表单（树最末节点） =====
+  function buildCurrentSubStepForm() {
+    const node = el('div', 'tree-node tree-node-current');
+    const header = el('div', 'tree-node-header');
+    const tag = el('span', 'tree-node-tag', '子步骤');
+    const badge = el('span', 'tree-node-badge', '当前');
+    const title = el('span', 'tree-node-title', '子步骤（选择元素并填写气泡指引）');
+    header.appendChild(tag);
+    header.appendChild(badge);
+    header.appendChild(title);
+    node.appendChild(header);
 
-  // ★ 自定义下拉（antd 风格），id 兼容原 markPositionSelect
-  const positionWrapper = el('div', 'form-field');
-  const positionLabel = el('label', 'field-label', '位置 (position)');
-  positionWrapper.appendChild(positionLabel);
-  const positionSelectDropdown = createSelectDropdown({
-    id: 'markPositionSelect',
-    options: [
-      { value: 'right',  label: 'right',  icon: '➡️' },
-      { value: 'bottom', label: 'bottom', icon: '⬇️' },
-      { value: 'left',   label: 'left',   icon: '⬅️' },
-      { value: 'top',    label: 'top',    icon: '⬆️' },
-    ],
-    // ★ 从 appState 读取上次选择，跨步骤/重渲染保持不变（期间用户可改，改动即生效）
-    value: appState.markPosition || 'right',
-    onChange: (v) => { appState.markPosition = v; },
-  });
-  positionWrapper.appendChild(positionSelectDropdown.wrapper);
-  positionRow.appendChild(positionWrapper);
+    const body = el('div', 'tree-node-body');
 
-  // ★ showNextStep 开关 — 纯开关，不带 input 框
-  const showNextWrapper = el('div', 'form-field');
-  const showNextLabel = el('label', 'field-label', '下一步按钮 (showNextStep)');
-  showNextWrapper.appendChild(showNextLabel);
-  const showNextControl = el('div', 'switch-control');
-  const showNextText = el('span', 'switch-text', (appState.markShowNext !== false) ? '显示' : '隐藏');
-  const showNextToggle = el('label', 'switch');
-  const showNextCheckbox = el('input');
-  showNextCheckbox.type = 'checkbox';
-  showNextCheckbox.id = 'markShowNextStepInput';
-  // ★ 从 appState 读取上次选择（默认显示），跨重渲染保持不变
-  showNextCheckbox.checked = appState.markShowNext !== false;
-  const showNextSlider = el('span', 'slider');
-  showNextToggle.appendChild(showNextCheckbox);
-  showNextToggle.appendChild(showNextSlider);
-  showNextControl.appendChild(showNextText);
-  showNextControl.appendChild(showNextToggle);
-  showNextWrapper.appendChild(showNextControl);
-  positionRow.appendChild(showNextWrapper);
+    // 选择模式提示
+    const selectionHint = el('div', 'selection-active-hint');
+    selectionHint.id = 'selectionHint';
+    selectionHint.textContent = '🎯 请在浏览器中点击要标记的元素 | Esc退出';
+    selectionHint.style.display = appState.isSelectingMode ? '' : 'none';
+    body.appendChild(selectionHint);
 
-  markBox.appendChild(positionRow);
+    // 标记操作行：选择按钮 + 气泡指引标题
+    const markRow = el('div', 'mark-action-row');
+    markRow.id = 'markActionRow';
+    const markBtn = el('button', appState.isSelectingMode ? 'btn btn-danger btn-sm' : 'btn btn-primary btn-sm');
+    markBtn.textContent = appState.isSelectingMode ? '✕ 取消选择' : '⊕ 选择元素';
+    markBtn.id = 'markBtn';
+    markBtn.addEventListener('click', () => toggleSelectionMode());
+    markRow.appendChild(markBtn);
 
-  // ★ 监听 showNextStep 开关，更新文字并持久化到 appState（跨步骤/重渲染保留最新值）
-  showNextCheckbox.addEventListener('change', () => {
-    appState.markShowNext = showNextCheckbox.checked;
-    showNextText.textContent = showNextCheckbox.checked ? '显示' : '隐藏';
-  });
+    const mainTitleField = formField({
+      label: '气泡指引标题',
+      placeholder: '例如：点击登录按钮',
+      id: 'markMainTitleInput',
+      value: appState.selectedElementData ? (appState.selectedElementData.text || '') : '',
+      style: 'margin-bottom: 0; flex: 1;',
+    });
+    mainTitleField.wrapper.style.flex = '1';
+    mainTitleField.wrapper.style.marginBottom = '0';
+    markRow.appendChild(mainTitleField.wrapper);
+    body.appendChild(markRow);
 
-  // 标记列表
-  const markListEl = el('div', 'mark-list');
-  markListEl.id = 'markList';
-  renderMarkList(markListEl);
-  markBox.appendChild(markListEl);
+    // 副标题
+    const subTitleField = formField({
+      label: '气泡指引副标题',
+      placeholder: '选填，例如：点击登录按钮',
+      id: 'markSubTitleInput',
+    });
+    body.appendChild(subTitleField.wrapper);
 
-  contentEl.appendChild(markBox);
+    // ★ position 下拉 + showNextStep 开关（并排）
+    const positionRow = el('div', 'form-field-row');
+    const positionWrapper = el('div', 'form-field');
+    positionWrapper.appendChild(el('label', 'field-label', '位置 (position)'));
+    const positionSelectDropdown = createSelectDropdown({
+      id: 'markPositionSelect',
+      options: [
+        { value: 'right',  label: 'right',  icon: '➡️' },
+        { value: 'bottom', label: 'bottom', icon: '⬇️' },
+        { value: 'left',   label: 'left',   icon: '⬅️' },
+        { value: 'top',    label: 'top',    icon: '⬆️' },
+      ],
+      value: appState.markPosition || 'right',
+      onChange: (v) => { appState.markPosition = v; },
+    });
+    positionWrapper.appendChild(positionSelectDropdown.wrapper);
+    positionRow.appendChild(positionWrapper);
 
-  // ── 操作 ──
-  contentEl.appendChild(el('div', 'section-title', '操作'));
-  const stepBox = el('div', 'section-box');
+    const showNextWrapper = el('div', 'form-field');
+    showNextWrapper.appendChild(el('label', 'field-label', '下一步按钮 (showNextStep)'));
+    const showNextControl = el('div', 'switch-control');
+    const showNextText = el('span', 'switch-text', (appState.markShowNext !== false) ? '显示' : '隐藏');
+    const showNextToggle = el('label', 'switch');
+    const showNextCheckbox = el('input');
+    showNextCheckbox.type = 'checkbox';
+    showNextCheckbox.id = 'markShowNextStepInput';
+    showNextCheckbox.checked = appState.markShowNext !== false;
+    const showNextSlider = el('span', 'slider');
+    showNextToggle.appendChild(showNextCheckbox);
+    showNextToggle.appendChild(showNextSlider);
+    showNextControl.appendChild(showNextText);
+    showNextControl.appendChild(showNextToggle);
+    showNextWrapper.appendChild(showNextControl);
+    positionRow.appendChild(showNextWrapper);
+    body.appendChild(positionRow);
 
-  const stepInfo = el('div', 'step-info');
-  stepInfo.textContent = appState.state.currentStepId ? '当前步骤: ' + appState.state.currentStepId : '';
-  stepBox.appendChild(stepInfo);
+    showNextCheckbox.addEventListener('change', () => {
+      appState.markShowNext = showNextCheckbox.checked;
+      showNextText.textContent = showNextCheckbox.checked ? '显示' : '隐藏';
+    });
 
-  const stepShortcutHint = el('div', 'shortcut-hint');
-  stepShortcutHint.textContent = '快捷键: Alt+S 下一步 | Alt+Q 结束保存';
-  stepBox.appendChild(stepShortcutHint);
+    // ── 操作按钮 ──
+    const stepBox = el('div', 'step-box');
+    const stepInfo = el('div', 'step-info');
+    stepInfo.textContent = appState.state.currentStepId ? '当前步骤: ' + appState.state.currentStepId : '';
+    stepBox.appendChild(stepInfo);
 
-  const btnRow = el('div', 'btn-row');
+    const stepShortcutHint = el('div', 'shortcut-hint');
+    stepShortcutHint.textContent = '快捷键: Alt+S 下一步 | Alt+Q 结束保存';
+    stepBox.appendChild(stepShortcutHint);
 
-  const nextStepBtn = el('button', 'btn btn-primary btn-sm');
-  nextStepBtn.textContent = '下一步';
-  nextStepBtn.id = 'nextStepBtn';
-  nextStepBtn.disabled = !(appState.state.markedElements.length > 0 || appState.hasSelectedElement);
-  nextStepBtn.className = nextStepBtn.disabled ? 'btn btn-primary btn-sm btn-disabled' : 'btn btn-primary btn-sm';
-  nextStepBtn.addEventListener('click', async () => {
-    if (nextStepBtn.disabled) return;
-    if (appState.hasSelectedElement && mainTitleInput) {
-      const mainTitle = mainTitleInput.value.trim();
-      if (!mainTitle) {
-        showToast('请先输入主标题再进行下一步', 'error');
-        return;
+    const btnRow = el('div', 'btn-row');
+
+    const nextStepBtn = el('button', 'btn btn-primary btn-sm');
+    nextStepBtn.textContent = '下一步';
+    nextStepBtn.id = 'nextStepBtn';
+    nextStepBtn.disabled = !(appState.state.markedElements.length > 0 || appState.hasSelectedElement);
+    nextStepBtn.className = nextStepBtn.disabled ? 'btn btn-primary btn-sm btn-disabled' : 'btn btn-primary btn-sm';
+    nextStepBtn.addEventListener('click', async () => {
+      if (nextStepBtn.disabled) return;
+      nextStepBtn.disabled = true;
+      nextStepBtn.textContent = '处理中...';
+      updateStatus('正在捕获页面（录制中）...', 'var(--accent-blue)');
+      showLoadingOverlay();
+
+      const mainModName = getVal('mainModNameInput');
+      const mainModDesc = getVal('mainModDescInput');
+      const modName = getVal('modNameInput');
+
+      // ★ 自动标记兜底：若「选择即标记」的异步链路（completeMark IPC）尚未把标记落库，
+      //   在捕获前用 _pendingMark 重提交一次。顺序保证 completeMark 先于 nextStepWebview 到达后端，
+      //   杜绝「选择后秒点下一步」导致本步 marks 为空、预览无指引的竞态。
+      if (appState.state.markedElements.length === 0 && appState._pendingMark) {
+        appState.selectedElementData = appState._pendingMark;
+        const mt = document.getElementById('markMainTitleInput');
+        if (mt && !mt.value) mt.value = appState._pendingMark.text || '';
+        doCompleteMark();
       }
-      doCompleteMark();
-    }
-    nextStepBtn.disabled = true;
-    nextStepBtn.textContent = '处理中...';
-    updateStatus('正在捕获页面（录制中）...', 'var(--accent-blue)');
-    // ★ 录制中：显示全局 loading 遮罩，阻止用户操作页面/菜单，直到本步捕获完成。
-    //    ★ 注意：不要在这里手动置 appState.isProcessing=true —— 「下一步」内部会先 doCompleteMark()
-    //      （fire-and-forget 发送 completeMark），其 stateSync 会在捕获期间异步到达；
-    //      若此时 isProcessing 已为 true，onStateSync 的 wasProcessing 分支会误判为“捕获结束”，
-    //      提前隐藏遮罩并重置状态，导致遮罩闪烁/时序错乱。isProcessing 交由 onCaptureProgress/onStateSync 管理。
-    showLoadingOverlay();
 
-    // ★ 当前模块名/描述、当前主步骤标题，随下一步一并提交，避免重渲染后模块内容变空
-    const mainModName = mainModNameInput ? mainModNameInput.value.trim() : '';
-    const mainModDesc = mainModDescInput ? mainModDescInput.value.trim() : '';
-    const modName = modNameInput ? modNameInput.value.trim() : '';
-
-    // ★ 应用内浏览器模式：从 webview 捕获页面数据
-    if (appState.browserMode === 'in-app') {
-      try {
-        const webviewData = await captureWebviewData();
-        if (webviewData) {
-        webviewData.mainModName = mainModName;
-        webviewData.mainModDesc = mainModDesc;
-        webviewData.modName = modName;
-        const res = await sendAction('nextStepWebview', webviewData);
-        if (res && res.response && res.response.type === 'empty') {
-          // ★ 治本：本步页面内容为空，后端未创建空步骤（已保留标记）——提示用户等待加载后重试，而非录出空步骤
-          showToast('⚠️ 本步页面内容为空，未记录。请等待页面完全加载后重新点「下一步」', 'error', 6000);
-          updateStatus('本步内容为空未记录 — 请等待页面加载后重试「下一步」', 'var(--accent-red)');
-        } else {
-          updateStatus('✓ 已捕获当前步骤，可继续录制下一步', 'var(--accent-green)');
+      if (appState.browserMode === 'in-app') {
+        try {
+          const webviewData = await captureWebviewData();
+          if (webviewData) {
+            webviewData.mainModName = mainModName;
+            webviewData.mainModDesc = mainModDesc;
+            webviewData.modName = modName;
+            // ★ per-step 移动端标记：只记当前这一步的开关状态（checkbox DOM 真实状态 + appState 取 OR）。
+            //   下一步若没开，recorder 那边存的就是 false——支持混合录制（部分步骤 mobile、部分 PC）。
+            const _mobileSwitchCbNext = document.getElementById('mobileModeSwitch');
+            webviewData.isMobile = !!(appState.isMobileMode || (_mobileSwitchCbNext && _mobileSwitchCbNext.checked));
+            const res = await sendAction('nextStepWebview', webviewData);
+            if (res && res.response && res.response.type === 'empty') {
+              showToast('⚠️ 本步页面内容为空，未记录。请等待页面完全加载后重新点「下一步」', 'error', 6000);
+              updateStatus('本步内容为空未记录 — 请等待页面加载后重试「下一步」', 'var(--accent-red)');
+              // ★ 空步不清除 _pendingMark：用户重试时仍可兜底重提交该步标记
+            } else {
+              appState._pendingMark = null;
+              updateStatus('✓ 已捕获当前步骤，可继续录制下一步', 'var(--accent-green)');
+            }
+          } else {
+            showToast('捕获页面失败：webview 未就绪', 'error');
+          }
+        } catch (err) {
+          showToast('捕获页面失败: ' + err.message, 'error');
         }
-      } else {
-        showToast('捕获页面失败：webview 未就绪', 'error');
       }
-      } catch (err) {
-        showToast('捕获页面失败: ' + err.message, 'error');
+      hideLoadingOverlay();
+    });
+    btnRow.appendChild(nextStepBtn);
+
+    const endSaveBtn = el('button', 'btn btn-danger btn-sm');
+    endSaveBtn.textContent = '结束并保存';
+    endSaveBtn.addEventListener('click', () => handleEndAndSave());
+    btnRow.appendChild(endSaveBtn);
+
+    const clearBtn = el('button', 'btn btn-warning btn-sm');
+    clearBtn.textContent = '清空录制';
+    clearBtn.addEventListener('click', () => {
+      showConfirmDialog('确认清空录制', '清空后将丢失本次所有录制数据，且无法恢复。确定要清空吗？', () => sendAction('clearRecording'));
+    });
+    btnRow.appendChild(clearBtn);
+
+    stepBox.appendChild(btnRow);
+    body.appendChild(stepBox);
+
+    node.appendChild(body);
+    makeCollapsible(header, body, null, 'step-current', false);
+    return node;
+  }
+
+  // ===== 当前主步骤编辑表单（树节点，内嵌子步骤树） =====
+  function buildCurrentMainStepForm(sm, si, mi) {
+    const node = el('div', 'tree-node tree-node-current');
+    const header = el('div', 'tree-node-header');
+    const tag = el('span', 'tree-node-tag', '主步骤');
+    const badge = el('span', 'tree-node-badge', '当前');
+    const title = el('span', 'tree-node-title', '主步骤：' + (sm.mainStepTitle || ('步骤' + (si + 1))));
+    header.appendChild(tag);
+    header.appendChild(badge);
+    header.appendChild(title);
+    node.appendChild(header);
+
+    const body = el('div', 'tree-node-body');
+
+    const subModIdx = si;
+    const subModDefault = '步骤' + (subModIdx + 1);
+    const modNameField = formField({
+      label: '地图-主任务步骤',
+      required: true,
+      placeholder: '例如：输入账号密码',
+      id: 'modNameInput',
+      value: sm.mainStepTitle || subModDefault,
+    });
+    body.appendChild(modNameField.wrapper);
+
+    // ★ introduction 配置（默认收起，点击展开）
+    const introToggleRow = el('div', 'intro-toggle-row');
+    const introToggleBtn = el('button', 'btn btn-link btn-sm');
+    const hasIntro = sm.introduction;
+    // ★ 默认收起：文案统一为「添加」状态，表单默认隐藏（修复按钮/表单状态不一致）
+    introToggleBtn.textContent = '▶ 添加当前主流程故事';
+    introToggleRow.appendChild(introToggleBtn);
+    body.appendChild(introToggleRow);
+
+    const introBox = el('div', 'intro-box');
+    introBox.style.display = 'none';
+    const introKey = mi + '_' + si;
+    const introDraft = appState.savedInputValues['intro_' + introKey] || {};
+    const introQuestionField = formField({
+      label: '右下角场景故事主标',
+      placeholder: '例如：本方案要解决的核心问题',
+      id: 'introQuestionInput',
+      value: hasIntro ? (sm.introduction.question || '') : (introDraft.question || ''),
+    });
+    introBox.appendChild(introQuestionField.wrapper);
+    const introAnswerField = formField({
+      label: '右下角场景故事副标',
+      placeholder: '例如：方案带来的业务价值',
+      id: 'introAnswerInput',
+      value: hasIntro ? (sm.introduction.answer || '') : (introDraft.answer || ''),
+    });
+    introBox.appendChild(introAnswerField.wrapper);
+    body.appendChild(introBox);
+
+    const introQuestionInput = introQuestionField.input;
+    const introAnswerInput = introAnswerField.input;
+    function persistIntroDraft() {
+      const q = introQuestionInput ? introQuestionInput.value.trim() : '';
+      const a = introAnswerInput ? introAnswerInput.value.trim() : '';
+      if (!q && !a) {
+        delete appState.savedInputValues['intro_' + introKey];
+      } else {
+        appState.savedInputValues['intro_' + introKey] = { question: q, answer: a };
       }
     }
-    // ★ 结束本步：隐藏 loading 遮罩，恢复交互
-    hideLoadingOverlay();
+    if (introQuestionInput) introQuestionInput.addEventListener('input', persistIntroDraft);
+    if (introAnswerInput) introAnswerInput.addEventListener('input', persistIntroDraft);
+    introToggleBtn.addEventListener('click', () => {
+      const isVisible = introBox.style.display !== 'none';
+      introBox.style.display = isVisible ? 'none' : 'block';
+      introToggleBtn.textContent = isVisible ? '▶ 添加当前主流程故事' : '▼ 收起当前主流程故事';
+    });
+
+    node.appendChild(body);
+
+    // 子步骤树（内嵌到当前主步骤节点下）
+    const children = el('div', 'tree-children');
+    (sm.steps || []).forEach((st, sti) => children.appendChild(buildHistoricalSubStep(st, sti)));
+    children.appendChild(buildCurrentSubStepForm());
+    node.appendChild(children);
+    makeCollapsible(header, body, children, 'sub-current', false);
+    return node;
+  }
+
+  // ===== 当前模块编辑表单（树根节点，内嵌主步骤树） =====
+  function buildCurrentModuleForm(mm, mi) {
+    const node = el('div', 'tree-node tree-node-current');
+    const header = el('div', 'tree-node-header');
+    const tag = el('span', 'tree-node-tag', '模块');
+    const badge = el('span', 'tree-node-badge', '当前');
+    const title = el('span', 'tree-node-title', '模块：' + (mm.mainModuleName || ('模块' + (mi + 1))));
+    header.appendChild(tag);
+    header.appendChild(badge);
+    header.appendChild(title);
+    node.appendChild(header);
+
+    const body = el('div', 'tree-node-body');
+    const mainModIdx = mi;
+    const mainModDefault = '模块' + (mainModIdx + 1);
+    const mainModNameField = formField({
+      label: '地图-场景主标题',
+      required: true,
+      placeholder: '例如：登录认证',
+      id: 'mainModNameInput',
+      value: mm.mainModuleName || mainModDefault,
+    });
+    body.appendChild(mainModNameField.wrapper);
+    const mainModDescField = formField({
+      label: '地图-场景副标题',
+      placeholder: '选填，例如：用户输入账号密码并登录',
+      id: 'mainModDescInput',
+      value: mm.mainModuleDesc || '',
+    });
+    body.appendChild(mainModDescField.wrapper);
+    node.appendChild(body);
+
+    // 主步骤树（内嵌到当前模块节点下）
+    const children = el('div', 'tree-children');
+    const curSubIdx = appState.state.currentSubModuleIndex;
+    (mm.subModules || []).forEach((sm, si) => {
+      if (si < curSubIdx) children.appendChild(buildHistoricalMainStep(sm, si, mi));
+      else children.appendChild(buildCurrentMainStepForm(sm, si, mi));
+    });
+    const addSubBtn = el('button', 'btn btn-secondary btn-sm');
+    addSubBtn.textContent = '＋  新增主步骤';
+    addSubBtn.style.margin = '2px 0 2px 14px';
+    addSubBtn.addEventListener('click', onAddSubModule);
+    children.appendChild(addSubBtn);
+    node.appendChild(children);
+    makeCollapsible(header, body, children, 'mod-current', true);
+    return node;
+  }
+
+  // ===== 组装树 =====
+  const modules = appState.state.mainModules || [];
+  const curModIdx = appState.state.currentMainModuleIndex;
+
+  const treeRoot = el('div', 'tree-root');
+  modules.forEach((mm, mi) => {
+    if (mi < curModIdx) {
+      treeRoot.appendChild(buildHistoricalModule(mm, mi));
+    } else {
+      treeRoot.appendChild(buildCurrentModuleForm(mm, mi));
+    }
   });
-  btnRow.appendChild(nextStepBtn);
 
-  const endSaveBtn = el('button', 'btn btn-danger btn-sm');
-  endSaveBtn.textContent = '结束并保存';
-  endSaveBtn.addEventListener('click', () => handleEndAndSave());
-  btnRow.appendChild(endSaveBtn);
+  const addModBtn = el('button', 'btn btn-secondary btn-sm');
+  addModBtn.textContent = '＋  新增模块';
+  addModBtn.style.marginTop = '2px';
+  addModBtn.addEventListener('click', onAddMainModule);
+  treeRoot.appendChild(addModBtn);
 
-  const clearBtn = el('button', 'btn btn-warning btn-sm');
-  clearBtn.textContent = '清空录制';
-  clearBtn.addEventListener('click', () => {
-    showConfirmDialog('确认清空录制', '清空后将丢失本次所有录制数据，且无法恢复。确定要清空吗？', () => sendAction('clearRecording'));
-  });
-  btnRow.appendChild(clearBtn);
-
-  stepBox.appendChild(btnRow);
-  contentEl.appendChild(stepBox);
+  contentEl.appendChild(treeRoot);
 
   // ★ 录制记录已移至右栏（renderRightSteps）
 }

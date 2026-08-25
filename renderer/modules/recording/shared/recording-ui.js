@@ -403,10 +403,6 @@ export function renderRecordingPhase() {
     stepInfo.textContent = appState.state.currentStepId ? '当前步骤: ' + appState.state.currentStepId : '';
     stepBox.appendChild(stepInfo);
 
-    const stepShortcutHint = el('div', 'shortcut-hint');
-    stepShortcutHint.textContent = '快捷键: Alt+S 下一步 | Alt+Q 结束保存';
-    stepBox.appendChild(stepShortcutHint);
-
     const btnRow = el('div', 'btn-row');
 
     const nextStepBtn = el('button', 'btn btn-primary btn-sm');
@@ -465,18 +461,6 @@ export function renderRecordingPhase() {
       hideLoadingOverlay();
     });
     btnRow.appendChild(nextStepBtn);
-
-    const endSaveBtn = el('button', 'btn btn-danger btn-sm');
-    endSaveBtn.textContent = '结束并保存';
-    endSaveBtn.addEventListener('click', () => handleEndAndSave());
-    btnRow.appendChild(endSaveBtn);
-
-    const clearBtn = el('button', 'btn btn-warning btn-sm');
-    clearBtn.textContent = '清空录制';
-    clearBtn.addEventListener('click', () => {
-      showConfirmDialog('确认清空录制', '清空后将丢失本次所有录制数据，且无法恢复。确定要清空吗？', () => sendAction('clearRecording'));
-    });
-    btnRow.appendChild(clearBtn);
 
     stepBox.appendChild(btnRow);
     body.appendChild(stepBox);
@@ -639,6 +623,36 @@ export function renderRecordingPhase() {
   treeRoot.appendChild(addModBtn);
 
   contentEl.appendChild(treeRoot);
+
+  // ★ 结束保存 / 清空录制：放在树最外层（不在子步骤模块内），位置变更、逻辑不变
+  const treeActionBar = el('div', 'tree-action-bar');
+
+  // ★ 快捷键提示统一放在操作栏顶部，一行展示
+  const treeActionHint = el('div', 'tree-action-hint');
+  const treeActionHintPill = el('span', 'shortcut-hint');
+  treeActionHintPill.textContent = 'Alt+S 下一步 | Alt+Q 结束保存';
+  treeActionHint.appendChild(treeActionHintPill);
+  treeActionBar.appendChild(treeActionHint);
+
+  const endSaveItem = el('div', 'tree-action-item');
+  const endSaveBtn = el('button', 'btn btn-danger btn-sm');
+  endSaveBtn.textContent = '结束并保存';
+  endSaveBtn.id = 'endSaveBtn';
+  endSaveBtn.addEventListener('click', () => handleEndAndSave());
+  endSaveItem.appendChild(endSaveBtn);
+  treeActionBar.appendChild(endSaveItem);
+
+  const clearItem = el('div', 'tree-action-item');
+  const clearBtn = el('button', 'btn btn-warning btn-sm');
+  clearBtn.textContent = '清空录制';
+  clearBtn.id = 'clearRecordingBtn';
+  clearBtn.addEventListener('click', () => {
+    showConfirmDialog('确认清空录制', '清空后将丢失本次所有录制数据，且无法恢复。确定要清空吗？', () => sendAction('clearRecording'));
+  });
+  clearItem.appendChild(clearBtn);
+  treeActionBar.appendChild(clearItem);
+
+  contentEl.appendChild(treeActionBar);
 
   // ★ 录制记录已移至右栏（renderRightSteps）
 }

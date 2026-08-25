@@ -685,18 +685,30 @@
   overflow: hidden;
 }
 
+/* ★ 层级背景对比：模块(最浅) → 主步骤 → 子步骤(最深)，用边框 + 背景区分层级，不再使用左侧竖线 */
+.tree-root > .tree-node {
+  background: #f6f8fc;
+}
+.tree-children > .tree-node {
+  background: #eaf0f8;
+}
+.tree-children .tree-children > .tree-node {
+  background: #dfe8f4;
+}
+
 .tree-node-current {
   border-color: var(--border-subtle);
-  background: var(--bg-section);
 }
 
 .tree-node-historical {
-  background: var(--bg-input);
+  /* 历史节点复用层级背景；仅以较浅边框 + 轻微透明与「当前可编辑节点」区分，不再单独换底色 */
+  border-color: var(--border-subtle);
+  opacity: 0.92;
 }
 
 .tree-node-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 9px 12px;
   font-size: 13px;
@@ -725,9 +737,8 @@
 
 .tree-node-title {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* ★ 层级辅助标识文案（模块 / 主步骤 / 子步骤），低调灰，置节点头部左侧 */
@@ -779,9 +790,8 @@
 }
 
 .tree-children {
-  margin: 8px 0 4px 14px;
-  padding-left: 12px;
-  border-left: 2px solid rgba(19, 34, 64, 0.12);
+  margin: 6px 0 2px 4px;
+  padding-left: 8px;
   display: flex;
   flex-direction: column;
   gap: 6px;

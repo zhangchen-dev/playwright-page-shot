@@ -26,12 +26,17 @@
     return 'auto_step_elementId';
   }
 
+  // ===== 文档坐标换算：把元素的 viewport 坐标（getBoundingClientRect）转换为文档绝对坐标，
+  //   用于让高亮框随页面滚动一起移动（position:absolute 锚定在文档，滚动时与元素同步移动）。
+  function _docTop(rect, win) { return rect.top + (win ? win.scrollY : window.scrollY); }
+  function _docLeft(rect, win) { return rect.left + (win ? win.scrollX : window.scrollX); }
+
   // ===== 顶层高亮遮罩层 =====
   const overlay = document.createElement('div');
   overlay.id = '__rec_highlight_overlay';
   overlay.style.cssText = [
-    'position:fixed', 'pointer-events:none', 'z-index:2147483646',
-    'border:2px solid #165dff', 'background:rgba(22,93,255,0.08)',
+    'position:absolute', 'pointer-events:none', 'z-index:2147483646',
+    'border:2px dashed #fd8d22', 'background:rgba(253,141,34,0.15)',
     'border-radius:2px', 'display:none', 'box-sizing:border-box',
     'transition:all 0.05s ease',
   ].join(';');
@@ -42,7 +47,7 @@
   tooltip.id = '__rec_selection_tooltip';
   tooltip.style.cssText = [
     'position:fixed', 'z-index:2147483647',
-    'background:rgba(22,93,255,0.9)', 'color:#ffffff',
+    'background:rgba(253,141,34,0.9)', 'color:#ffffff',
     'padding:4px 8px', 'border-radius:4px',
     'font-size:11px', 'font-family:system-ui,sans-serif',
     'pointer-events:none', 'display:none',
@@ -69,8 +74,8 @@
     if (e.type === 'mouseover' || e.type === 'mousemove' || e.type === 'pointermove') {
       const rect = e.target.getBoundingClientRect();
       overlay.style.display = 'block';
-      overlay.style.top = rect.top + 'px';
-      overlay.style.left = rect.left + 'px';
+      overlay.style.top = _docTop(rect) + 'px';
+      overlay.style.left = _docLeft(rect) + 'px';
       overlay.style.width = rect.width + 'px';
       overlay.style.height = rect.height + 'px';
 
@@ -97,9 +102,10 @@
 
       // ★ 选中后保留高亮框在页面上（让用户看到选了哪个元素）；
       //   该 overlay 在捕获 HTML 时会被排除（captureWebviewData cleanupCode 移除），不会写入最终保存的 HTML
+      //   使用文档绝对坐标（position:absolute），滚动页面时高亮框随元素一起移动
       var rect = e.target.getBoundingClientRect();
-      overlay.style.top = rect.top + 'px';
-      overlay.style.left = rect.left + 'px';
+      overlay.style.top = _docTop(rect) + 'px';
+      overlay.style.left = _docLeft(rect) + 'px';
       overlay.style.width = rect.width + 'px';
       overlay.style.height = rect.height + 'px';
       overlay.style.display = 'block';
@@ -170,8 +176,8 @@
       // 在 iframe 内创建 overlay 和 tooltip
       var iOverlay = doc.createElement('div');
       iOverlay.style.cssText = [
-        'position:fixed', 'pointer-events:none', 'z-index:2147483646',
-        'border:2px solid #165dff', 'background:rgba(22,93,255,0.08)',
+        'position:absolute', 'pointer-events:none', 'z-index:2147483646',
+        'border:2px dashed #fd8d22', 'background:rgba(253,141,34,0.15)',
         'border-radius:2px', 'display:none', 'box-sizing:border-box',
         'transition:all 0.05s ease',
       ].join(';');
@@ -180,7 +186,7 @@
       var iTooltip = doc.createElement('div');
       iTooltip.style.cssText = [
         'position:fixed', 'z-index:2147483647',
-        'background:rgba(22,93,255,0.9)', 'color:#ffffff',
+        'background:rgba(253,141,34,0.9)', 'color:#ffffff',
         'padding:4px 8px', 'border-radius:4px',
         'font-size:11px', 'font-family:system-ui,sans-serif',
         'pointer-events:none', 'display:none', 'white-space:nowrap',
@@ -200,8 +206,8 @@
         if (e.type === 'mouseover' || e.type === 'mousemove' || e.type === 'pointermove') {
           var rect = e.target.getBoundingClientRect();
           iOverlay.style.display = 'block';
-          iOverlay.style.top = rect.top + 'px';
-          iOverlay.style.left = rect.left + 'px';
+          iOverlay.style.top = _docTop(rect, iframe.contentWindow) + 'px';
+          iOverlay.style.left = _docLeft(rect, iframe.contentWindow) + 'px';
           iOverlay.style.width = rect.width + 'px';
           iOverlay.style.height = rect.height + 'px';
 
@@ -227,9 +233,10 @@
           e.target.id = elementId;
 
           // ★ 保留 iframe 内高亮框在选中元素上（让用户看到选了哪个元素；捕获时会被排除）
+          //   使用 iframe 文档绝对坐标（position:absolute），iframe 内滚动时高亮框随元素一起移动
           var iRect = e.target.getBoundingClientRect();
-          iOverlay.style.top = iRect.top + 'px';
-          iOverlay.style.left = iRect.left + 'px';
+          iOverlay.style.top = _docTop(iRect, iframe.contentWindow) + 'px';
+          iOverlay.style.left = _docLeft(iRect, iframe.contentWindow) + 'px';
           iOverlay.style.width = iRect.width + 'px';
           iOverlay.style.height = iRect.height + 'px';
           iOverlay.style.display = 'block';

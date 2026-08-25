@@ -3,10 +3,9 @@
  */
 import { appState } from '../../common/state.js';
 import { api, sendAction } from '../../common/api.js';
-import { updateStatus, showToast, showEnvConfigDialog, showConfirmDialog } from '../../common/feedback.js';
+import { updateStatus, showToast } from '../../common/feedback.js';
 import { showLoadingOverlay, hideLoadingOverlay } from '../../common/dom.js';
 import { captureWebviewData, enableWebviewSelectionMode, disableWebviewSelectionMode } from '../internal/webview-recording.js';
-import { closeExtraTabs } from '../../common/tabs.js';
 import { collectIntroduction } from './recording-ui.js';
 import { confirmAndSaveReRecord } from '../rerecord/rerecord-flow.js';
 
@@ -88,8 +87,8 @@ export async function handleEndAndSave() {
     appState._reRecordSaveMode = decision.saveMode;
   }
 
-  // ★ 使用环境配置对话框
-  //   - defaultSceneCode 优先使用 state.sceneCode（正常录制已由后端生成 sen_code_ 场景码）
+  // ★ 环境配置：默认使用「生产环境 (prd)」，不再弹出选择框。
+  //   - sceneCode 优先使用 state.sceneCode（正常录制已由后端生成 sen_code_ 场景码）
   //   - 兜底使用 sceneTitle / sceneName（来自继续录制的 sceneConfig，二者已合并）
   //   - 再兜底使用 sen_code_ + 6 位随机（与后端 _genRandomSuffix 同规则，避免空字符串卡死）
   const genFallbackSceneCode = () => {
@@ -103,15 +102,12 @@ export async function handleEndAndSave() {
     || cfg.sceneTitle
     || cfg.sceneName
     || genFallbackSceneCode();
-  const envConfig = await showEnvConfigDialog(fallbackCode);
-
-  // ★ 关键修复：用户取消（按 Esc / 点取消按钮 / 点遮罩）→ 直接退出保存流程
-  //   防止 await showEnvConfigDialog 解析为 null 后下面的 sendAction 误用空字段
-  if (!envConfig) {
-    showToast('已取消保存', 'info', 2000);
-    updateStatus('', '');
-    return;
-  }
+  // ★ 默认生产环境，无需用户选择（dev/prd 的 envBaseUrl 实测为同一地址，见 feedback.js ENV_URLS）
+  const envConfig = {
+    environment: 'prd',
+    sceneCode: fallbackCode,
+    envBaseUrl: 'https://xft-service-marketing.paas.cmbchina.cn/resource/file/demonstration/',
+  };
 
   // ★ P0 防御：未打开浏览器时给出明确提示，避免后续 captureWebviewData 挂起
   if (!appState.browserLaunched) {
@@ -179,32 +175,14 @@ export async function handleEndAndSave() {
   if (result && result.type === 'error') {
     showToast('保存失败：' + (result.message || ''), 'error', 5000);
   } else if (result && result.type === 'saveComplete') {
-    showToast('保存成功：' + result.fileCount + ' 个文件', 'success');
     let status = '🎉 录制完成！已保存 ' + result.fileCount + ' 个文件，可前往「场景管理」预览';
     if (result.skippedEmptyLastStep) {
       status += '（末步内容为空已跳过，可在场景管理重录该步）';
-      showToast('⚠️ 末步内容为空已跳过，可在场景管理重录该步', 'error', 5000);
     }
     updateStatus(status, 'var(--accent-green)');
-    // ★ 应用内模式：无外部浏览器。保存完成后询问是否清理录制的弹窗 tab。
-    //   （主 webview 不关闭，方便继续浏览 / 输入新地址继续录制）
-    showConfirmDialog(
-      '录制已完成',
-      '是否关闭录制中打开的弹窗标签页？',
-      async () => {
-        // 确认 → 关闭除主 tab 外的所有 webview（target=_blank 等弹窗）
-        try { await closeExtraTabs(); } catch (e) { /* ignore */ }
-        updateStatus('已关闭弹窗标签页', 'var(--text-secondary)');
-      },
-      {
-        confirmText: '关闭弹窗',
-        cancelText: '保持打开',
-        onCancel: () => {
-          // 保持打开：浏览器内容继续显示，可继续浏览或输入新地址
-          updateStatus('浏览器保持打开，可继续浏览或输入新地址', 'var(--text-secondary)');
-        },
-      }
-    );
+    // ★ 优化：结束录制不再弹出「是否关闭浏览器/弹窗」选择框，默认不关闭浏览器，
+    //   仅以 message 信息提醒用户录制完成（浏览器保持打开，可继续浏览或输入新地址继续录制）。
+    showToast('录制完成，已保存 ' + result.fileCount + ' 个文件' + (result.skippedEmptyLastStep ? '（末步为空已跳过）' : ''), 'success', 4000);
   }
 }
 

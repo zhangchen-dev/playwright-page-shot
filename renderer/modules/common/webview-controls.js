@@ -3,7 +3,7 @@
  */
 import { appState, CONSTANTS } from './state.js';
 import { api } from './api.js';
-import { showToast } from './feedback.js';
+import { showToast, notifyWebviewLoadFail } from './feedback.js';
 import { updateAlwaysOnTop } from './layout.js';
 import { toggleFullscreenPreview, } from '../preview/preview.js';
 import { syncPreviewStepSelector } from '../preview/step-selector.js';
@@ -409,15 +409,16 @@ export function initBrowserModeControls() {
     });
     webview.addEventListener('did-navigate-in-page', hideLoading);
 
-    // ★ did-fail-load — 加载失败也隐藏
-    webview.addEventListener('did-fail-load', hideLoading);
-    // did-fail-load — 显示错误信息（与上方 hideLoading 并存，保留原两处监听行为）
+    // ★ did-fail-load — 加载失败：隐藏加载提示；主框架失败弹错误 modal 告知用户
+    //   （子资源 iframe / 图片 / xhr 失败 isMainFrame=false，不弹，避免刷屏）
     webview.addEventListener('did-fail-load', (e) => {
-      const loading = document.getElementById('previewLoading');
-      if (loading) {
-        loading.textContent = '加载失败: ' + (e.errorDescription || '未知错误');
-        loading.classList.add('active');
-      }
+      hideLoading();
+      notifyWebviewLoadFail(e);
+    });
+    // ★ did-fail-provisional-load — 导航提交前失败（如 DNS 解析 ERR_NAME_NOT_RESOLVED），
+    //   主框架失败时同样弹错误 modal（与 did-fail-load 共享去重，避免双弹）
+    webview.addEventListener('did-fail-provisional-load', (e) => {
+      notifyWebviewLoadFail(e);
     });
 
     // ★ 新窗口处理 — 统一走"主进程 setWindowOpenHandler → IPC → tabs.js 开新 tab"

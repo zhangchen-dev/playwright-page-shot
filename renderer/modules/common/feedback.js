@@ -220,3 +220,76 @@ export function showEnvConfigDialog(defaultSceneCode) {
     setTimeout(() => { if (confirmBtn) confirmBtn.focus(); }, 50);
   });
 }
+
+/**
+ * ★ 错误弹窗（modal）— 内部浏览器加载失败等需要明确告知用户的场景
+ *  - 仅「知道了」按钮，点击 / Esc / 点遮罩均可关闭
+ *  - 标题默认红色强调，便于在普通对话框中一眼区分
+ * @param {string} title 标题（默认「发生错误」）
+ * @param {string} message 主要错误信息（如 ERR_NAME_NOT_RESOLVED）
+ * @param {object} [options] { code, url, confirmText, onClose }
+ */
+export function showErrorModal(title, message, options) {
+  options = options || {};
+  const overlay = el('div', 'dialog-overlay');
+  const dialog = el('div', 'dialog dialog-error');
+
+  const titleEl = el('div', 'dialog-title', title || '发生错误');
+  titleEl.style.color = 'var(--accent-red, #e54545)';
+  dialog.appendChild(titleEl);
+
+  const descEl = el('div', 'dialog-desc');
+  descEl.style.whiteSpace = 'pre-wrap';
+  let text = message || '';
+  if (options.code !== undefined && options.code !== null && options.code !== '') {
+    text += '\n错误码: ' + String(options.code);
+  }
+  descEl.textContent = text;
+  dialog.appendChild(descEl);
+
+  if (options.url) {
+    const urlEl = el('div', 'dialog-desc');
+    urlEl.style.fontSize = '11px';
+    urlEl.style.color = 'var(--text-muted, #999)';
+    urlEl.style.wordBreak = 'break-all';
+    urlEl.style.marginTop = '6px';
+    urlEl.textContent = '地址: ' + options.url;
+    dialog.appendChild(urlEl);
+  }
+
+  const btnRow = el('div', 'dialog-btn-row');
+  const okBtn = el('button', 'dialog-confirm-btn', options.confirmText || '知道了');
+  okBtn.addEventListener('click', () => { overlay.remove(); if (options.onClose) options.onClose(); });
+  btnRow.appendChild(okBtn);
+  dialog.appendChild(btnRow);
+
+  overlay.appendChild(dialog);
+  // ★ 防御：防止叠加 — 先清理已有的 dialog overlay
+  document.querySelectorAll('.dialog-overlay').forEach((o) => o.remove());
+  document.body.appendChild(overlay);
+  setTimeout(() => { if (okBtn) okBtn.focus(); }, 50);
+  return overlay;
+}
+
+/**
+ * ★ 内部浏览器加载失败 → 弹错误 modal
+ *  - 仅当【主框架】加载失败（event.isMainFrame === true）才提示；
+ *    子资源（iframe / 图片 / xhr）失败 isMainFrame=false，不弹，避免刷屏
+ *  - 同一地址 1.5s 内只弹一次（去重，防止导航重试连续触发多个弹窗）
+ *  - 供 webview-controls.js（主 webview）与 tabs.js（弹窗 webview）的
+ *    did-fail-load / did-fail-provisional-load 事件调用
+ * @param {object} e webview 的 did-fail-load / did-fail-provisional-load 事件对象
+ */
+let _lastWebviewFail = { url: '', t: 0 };
+export function notifyWebviewLoadFail(e) {
+  if (!e) return;
+  if (e.isMainFrame === false) return; // 子资源 / iframe 失败，忽略
+  const url = e.validatedURL || '';
+  const now = Date.now();
+  if (_lastWebviewFail.url === url && now - _lastWebviewFail.t < 1500) return; // 去重
+  _lastWebviewFail = { url, t: now };
+  showErrorModal('页面加载失败', e.errorDescription || '页面无法加载', {
+    code: e.errorCode,
+    url: url,
+  });
+}

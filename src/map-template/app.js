@@ -879,11 +879,20 @@
   }
 
   /**
-   * 返回列表
+   * 返回演示中心首页
+   * ★ 优化：演示结束页点击「返回演示中心首页」→ 退出演示（通知宿主退出全屏预览，
+   *   恢复录制面板），并重置演示状态。不再仅弹 alert。
+   *   sendExitFullscreen 通过 webview preload 暴露的 __recSendToHost 向宿主面板发送
+   *   「preview-exit-fullscreen」事件，宿主收到后调用 toggleFullscreenPreview(false) 退出全屏预览。
    */
   function returnToList() {
-    alert('返回演示中心首页');
-    // 实际项目中应跳转到列表页
+    sendExitFullscreen('exit');
+    setState({
+      stepState: '0',
+      currentStep: [-1, -1, -1],
+      stepFinished: false,
+      sceneStoryShow: false,
+    });
   }
 
   /**

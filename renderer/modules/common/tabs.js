@@ -16,6 +16,7 @@
  */
 import { appState } from './state.js';
 import { api } from './api.js';
+import { notifyWebviewLoadFail } from './feedback.js';
 import { applyMobileEmulation, MOBILE_UA, effectiveMobileMode } from './webview-controls.js';
 
 let logMain = (msg) => {
@@ -201,9 +202,11 @@ async function bindTabWebview(wv, tabId) {
       const loading = document.getElementById('previewLoading');
       if (loading) loading.classList.remove('active');
     });
-    wv.addEventListener('did-fail-load', () => {
+    wv.addEventListener('did-fail-load', (e) => {
       const loading = document.getElementById('previewLoading');
       if (loading) loading.classList.remove('active');
+      // ★ 主框架加载失败弹错误 modal 告知用户（子资源失败忽略），与预览主 webview 同源工具
+      notifyWebviewLoadFail(e);
     });
 
     // 页面标题就绪后更新 tab 名
